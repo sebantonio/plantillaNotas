@@ -471,10 +471,6 @@
                 <svg id="evolutionChart" class="evolution-chart" viewBox="0 0 720 260" role="img" aria-label="Grafico de evolucion"></svg>
             </article>
 
-            <article class="card panel">
-                <h2>Medias del grupo</h2>
-                <div id="groupBars" class="bars"></div>
-            </article>
         </section>
 
         <section class="report-grid">
@@ -509,9 +505,7 @@
         const EVALUATIONS = [
             { value: "1", label: "1 EVA" },
             { value: "2", label: "2 EVA" },
-            { value: "2solo", label: "2 EVA solo" },
             { value: "3", label: "3 EVA" },
-            { value: "3solo", label: "3 EVA solo" },
             { value: "final", label: "Final" }
         ];
 
@@ -531,8 +525,7 @@
         const averageGrade = document.getElementById("averageGrade");
         const passedEvaluations = document.getElementById("passedEvaluations");
         const evolutionChart = document.getElementById("evolutionChart");
-        const groupBars = document.getElementById("groupBars");
-        const summaryBody = document.getElementById("summaryBody");
+const summaryBody = document.getElementById("summaryBody");
         const focusTitle = document.getElementById("focusTitle");
         const focusDetail = document.getElementById("focusDetail");
         const evaluationReports = document.getElementById("evaluationReports");
@@ -562,12 +555,14 @@
         async function loadReports() {
             try {
                 showMessage("Leyendo evaluaciones del Excel...", "info");
-                const results = [];
 
-                for (const evaluation of EVALUATIONS) {
-                    const data = await window.electronExcel.getNotasEvaluacion({ evaluacion: evaluation.value });
-                    results.push({ ...evaluation, data });
-                }
+                // Carga en paralelo (antes era secuencial: 6 lecturas × 5s = 30s)
+                const results = await Promise.all(
+                    EVALUATIONS.map(async (evaluation) => {
+                        const data = await window.electronExcel.getNotasEvaluacion({ evaluacion: evaluation.value });
+                        return { ...evaluation, data };
+                    })
+                );
 
                 state.evaluations = results;
                 state.students = buildStudentList(results);
@@ -648,7 +643,6 @@
 
             // Batching: agregar renders a queue en lugar de ejecutar inmediatamente
             scheduleRender(() => renderEvolutionChart(selected));
-            scheduleRender(() => renderGroupBars());
             scheduleRender(() => renderSummaryTable(selected));
             scheduleRender(() => renderFocusDetail(selected));
             scheduleRender(() => renderEvaluationReports(selected));
@@ -740,21 +734,7 @@
             return `<text x="50%" y="50%" text-anchor="middle" fill="#61708a" font-size="16">${escapeHtml(text)}</text>`;
         }
 
-        function renderGroupBars() {
-            groupBars.innerHTML = state.evaluations.map((evaluation) => {
-                const stats = getEvaluationStats(evaluation.data);
-                const value = stats.average === null ? 0 : Math.max(0, Math.min(10, stats.average));
-                return `
-                    <div class="bar-row">
-                        <span>${escapeHtml(evaluation.label)}</span>
-                        <div class="bar-track"><div class="bar-fill" style="width: ${value * 10}%"></div></div>
-                        <strong>${stats.average === null ? "-" : formatGrade(stats.average)}</strong>
-                    </div>
-                `;
-            }).join("");
-        }
-
-        function renderSummaryTable(series) {
+function renderSummaryTable(series) {
             summaryBody.innerHTML = series.map((item) => `
                 <tr>
                     <td>${escapeHtml(item.label)}</td>
@@ -854,7 +834,6 @@
             averageGrade.textContent = "-";
             passedEvaluations.textContent = "0";
             evolutionChart.innerHTML = chartEmptyText("Sin datos.");
-            groupBars.innerHTML = "";
             summaryBody.innerHTML = "";
             focusDetail.innerHTML = "";
             evaluationReports.innerHTML = "";
