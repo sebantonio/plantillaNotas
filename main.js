@@ -9,6 +9,30 @@ const JSZip = require('jszip');
 let mainWindow;
 let selectedExcelPath = null;
 let allowWindowClose = false;
+
+// Caché de workbook: evita releer el Excel si no ha cambiado
+let _cachedWorkbook = null;
+let _cachedWorkbookKey = null;
+
+function getCachedWorkbook(filePath, options = {}) {
+  const key = `${filePath}::${JSON.stringify(options.sheets || [])}`;
+  if (_cachedWorkbookKey === key && _cachedWorkbook) return _cachedWorkbook;
+  _cachedWorkbook = XLSX.readFile(filePath, options);
+  _cachedWorkbookKey = key;
+  return _cachedWorkbook;
+}
+
+function invalidateWorkbookCache() {
+  _cachedWorkbook = null;
+  _cachedWorkbookKey = null;
+}
+
+// Caché de evaluaciones: guarda datos completos en memoria para filtrar por alumno
+const _evaluationsCache = new Map();
+
+function clearEvaluationsCache() {
+  _evaluationsCache.clear();
+}
 const defaultExcelName = 'plantilla313_dual - copia.xlsx';
 const ACTIVITY_TYPES = [
   { key: 'practicas', label: 'Practicas', baseCol: 0 },
@@ -93,6 +117,8 @@ ipcMain.handle('excel:selectFile', async () => {
   }
 
   selectedExcelPath = result.filePaths[0];
+  invalidateWorkbookCache();
+  clearEvaluationsCache();
   return loadAlumnosFromSelectedFile();
 });
 
@@ -239,7 +265,51 @@ ipcMain.handle('excel:getNotasEvaluacion', async (_event, payload = {}) => {
     return null;
   }
 
-  return loadNotasEvaluacionFromSelectedFile(payload.evaluacion || '1');
+  const evaluacion = payload.evaluacion || '1';
+  const data = loadNotasEvaluacionFromSelectedFile(evaluacion);
+  // Guarda en caché para servir peticiones por alumno sin releer Excel
+  _evaluationsCache.set(evaluacion, data);
+  return data;
+});
+
+// Handler optimizado: devuelve datos de UNA evaluación para UN alumno (desde caché)
+ipcMain.handle('excel:getNotasEvaluacionAlumno', async (_event, payload = {}) => {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  if (!selectedExcelPath) {
+    return null;
+  }
+
+  const evaluacion = String(payload.evaluacion || '1');
+  const nombreAlumno = String(payload.alumno || '');
+
+  // Si no está en caché, cargar y cachear
+  if (!_evaluationsCache.has(evaluacion)) {
+    const data = loadNotasEvaluacionFromSelectedFile(evaluacion);
+    _evaluationsCache.set(evaluacion, data);
+  }
+
+  const cached = _evaluationsCache.get(evaluacion);
+  return {
+    ...cached,
+    alumnos: cached.alumnos.filter((a) => a.nombre === nombreAlumno)
+  };
+});
+
+// Handler para obtener solo la lista de nombres de alumnos (muy rápido, desde DATOS)
+ipcMain.handle('excel:getAlumnosInformes', async () => {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  if (!selectedExcelPath) {
+    return null;
+  }
+
+  const result = loadAlumnosFromSelectedFile();
+  return result.alumnos.map((a) => a.nombre);
 });
 
 ipcMain.handle('app:openExternal', async (_event, url) => {
@@ -499,7 +569,8 @@ async function saveNotasActividadToFile(filePath, unidad, tipo, actividad, notas
 }
 
 function loadNotasEvaluacionFromSelectedFile(evaluacion = '1') {
-  const workbook = XLSX.readFile(selectedExcelPath, { cellDates: true, cellFormula: true });
+  // Reutiliza workbook si ya está en caché (evita releer el Excel completo)
+  const workbook = getCachedWorkbook(selectedExcelPath, { cellDates: true, cellFormula: true });
   const sheetName = findEvaluationSheetName(workbook, evaluacion);
 
   if (!sheetName) {
@@ -1773,7 +1844,45 @@ async function commandGetNotasEvaluacion(payload = {}) {
     selectedExcelPath = findDefaultExcelPath();
   }
 
-  return selectedExcelPath ? loadNotasEvaluacionFromSelectedFile(payload.evaluacion || '1') : null;
+  if (!selectedExcelPath) return null;
+
+  const evaluacion = String(payload.evaluacion || '1');
+  const data = loadNotasEvaluacionFromSelectedFile(evaluacion);
+  _evaluationsCache.set(evaluacion, data);
+  return data;
+}
+
+async function commandGetNotasEvaluacionAlumno(payload = {}) {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  if (!selectedExcelPath) return null;
+
+  const evaluacion = String(payload.evaluacion || '1');
+  const nombreAlumno = String(payload.alumno || '');
+
+  if (!_evaluationsCache.has(evaluacion)) {
+    const data = loadNotasEvaluacionFromSelectedFile(evaluacion);
+    _evaluationsCache.set(evaluacion, data);
+  }
+
+  const cached = _evaluationsCache.get(evaluacion);
+  return {
+    ...cached,
+    alumnos: cached.alumnos.filter((a) => a.nombre === nombreAlumno)
+  };
+}
+
+async function commandGetAlumnosInformes() {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  if (!selectedExcelPath) return null;
+
+  const result = loadAlumnosFromSelectedFile();
+  return result.alumnos.map((a) => a.nombre);
 }
 
 module.exports = {
@@ -1787,7 +1896,9 @@ module.exports = {
     saveRraaCriterios: commandSaveRraaCriterios,
     getNotasActividad: commandGetNotasActividad,
     saveNotasActividad: commandSaveNotasActividad,
-    getNotasEvaluacion: commandGetNotasEvaluacion
+    getNotasEvaluacion: commandGetNotasEvaluacion,
+    getNotasEvaluacionAlumno: commandGetNotasEvaluacionAlumno,
+    getAlumnosInformes: commandGetAlumnosInformes
   },
   findDefaultExcelPath,
   setSelectedExcelPath

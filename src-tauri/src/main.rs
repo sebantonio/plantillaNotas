@@ -122,6 +122,16 @@ fn excel_get_notas_evaluacion(payload: Value) -> Result<Value, String> {
 }
 
 #[tauri::command]
+fn excel_get_notas_evaluacion_alumno(payload: Value) -> Result<Value, String> {
+    call_node_backend("getNotasEvaluacionAlumno", payload)
+}
+
+#[tauri::command]
+fn excel_get_alumnos_informes() -> Result<Value, String> {
+    call_node_backend("getAlumnosInformes", serde_json::json!({}))
+}
+
+#[tauri::command]
 fn app_open_external(url: String) -> Result<(), String> {
     webbrowser::open(&url).map_err(|error| format!("No se pudo abrir el enlace: {error}"))
 }
@@ -139,6 +149,8 @@ fn main() {
             excel_get_notas_actividad,
             excel_save_notas_actividad,
             excel_get_notas_evaluacion,
+            excel_get_notas_evaluacion_alumno,
+            excel_get_alumnos_informes,
             app_open_external
         ])
         .run(tauri::generate_context!())

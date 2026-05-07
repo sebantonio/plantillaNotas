@@ -543,46 +543,95 @@ const summaryBody = document.getElementById("summaryBody");
 
             reloadButton.addEventListener("click", loadReports);
             printButton.addEventListener("click", () => window.print());
-            studentSelect.addEventListener("change", () => {
+            studentSelect.addEventListener("change", async () => {
                 state.selectedStudent = studentSelect.value;
+                showMessage("Cargando informe del alumno...", "info");
+                await loadStudentEvaluations(state.selectedStudent);
                 renderReport();
+                showMessage("", "");
             });
             evaluationFocus.addEventListener("change", renderReport);
 
             loadReports();
         });
 
+        // Cache de evaluaciones por alumno ya cargados (evita re-lectura al cambiar alumno)
+        const _alumnoCache = new Map();
+        let _evaluacionesCargadas = false;
+
         async function loadReports() {
             try {
-                showMessage("Leyendo evaluaciones del Excel...", "info");
+                // FASE 1: Cargar solo nombres de alumnos (~1s) → mostrar dropdown rápido
+                showMessage("Cargando lista de alumnos...", "info");
+                const nombres = await window.electronExcel.getAlumnosInformes();
 
-                // Carga en paralelo (antes era secuencial: 6 lecturas × 5s = 30s)
-                const results = await Promise.all(
-                    EVALUATIONS.map(async (evaluation) => {
-                        const data = await window.electronExcel.getNotasEvaluacion({ evaluacion: evaluation.value });
-                        return { ...evaluation, data };
-                    })
-                );
-
-                state.evaluations = results;
-                state.students = buildStudentList(results);
-
-                if (!state.students.length) {
-                    showMessage("No se encontraron alumnos en las hojas de evaluacion.", "error");
+                if (!nombres || !nombres.length) {
+                    showMessage("No se encontraron alumnos en el Excel.", "error");
                     renderEmpty();
                     return;
                 }
 
+                state.students = nombres.sort((a, b) => a.localeCompare(b, "es"));
                 if (!state.selectedStudent || !state.students.includes(state.selectedStudent)) {
                     state.selectedStudent = state.students[0];
                 }
 
                 renderStudentSelect();
+                showMessage("Lista cargada. Cargando datos del alumno...", "info");
+
+                // FASE 2: Cargar evaluaciones del alumno seleccionado (~5-7s, pero solo 1 alumno)
+                await loadStudentEvaluations(state.selectedStudent);
                 renderReport();
-                showMessage("Informes cargados correctamente.", "success");
+                showMessage("Informe cargado correctamente.", "success");
+
+                // FASE 3: Precarga del resto de alumnos en segundo plano
+                _preloadAllEvaluations();
+
             } catch (error) {
                 showMessage(error.message || "No se pudieron cargar los informes.", "error");
             }
+        }
+
+        async function loadStudentEvaluations(alumno) {
+            if (_alumnoCache.has(alumno)) {
+                state.evaluations = _alumnoCache.get(alumno);
+                return;
+            }
+
+            const results = await Promise.all(
+                EVALUATIONS.map(async (evaluation) => {
+                    const data = await window.electronExcel.getNotasEvaluacionAlumno({
+                        evaluacion: evaluation.value,
+                        alumno
+                    });
+                    return { ...evaluation, data };
+                })
+            );
+
+            _alumnoCache.set(alumno, results);
+            state.evaluations = results;
+        }
+
+        async function _preloadAllEvaluations() {
+            if (_evaluacionesCargadas) return;
+            for (const alumno of state.students) {
+                if (_alumnoCache.has(alumno)) continue;
+                try {
+                    const results = await Promise.all(
+                        EVALUATIONS.map(async (evaluation) => {
+                            const data = await window.electronExcel.getNotasEvaluacionAlumno({
+                                evaluacion: evaluation.value,
+                                alumno
+                            });
+                            return { ...evaluation, data };
+                        })
+                    );
+                    _alumnoCache.set(alumno, results);
+                } catch (_) {
+                    // Ignorar errores en precarga en segundo plano
+                }
+            }
+            _evaluacionesCargadas = true;
         }
 
         function buildStudentList(evaluations) {
