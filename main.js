@@ -252,31 +252,42 @@ function loadRraaCriteriosFromSelectedFile() {
 
   for (let i = rraaStart; i < datosRows.length; i += 1) {
     const row = datosRows[i] || [];
+    const numero = row[5];
     const descripcion = row[6];
 
-    if (!descripcion || String(descripcion).trim() === '') {
+    if ((!numero || String(numero).trim() === '') && (!descripcion || String(descripcion).trim() === '')) {
       break;
     }
 
     rraa.push({
-      numero: row[5] || rraa.length + 1,
-      descripcion: String(descripcion)
+      numero: numero || rraa.length + 1,
+      descripcion: descripcion ? String(descripcion).trim() : ''
     });
   }
 
   const criterios = [];
 
-  for (let i = 5; i < 21; i += 1) {
-    const row = pesosRows[i] || [];
-    const nombre = row[0];
+  for (let colIdx = 0; colIdx < (pesosRows[3] || []).length; colIdx += 1) {
+    const codigo = pesosRows[3] && pesosRows[3][colIdx];
 
-    if (nombre && String(nombre).trim() !== '') {
-      criterios.push({
-        numero: criterios.length + 1,
-        nombre: String(nombre),
-        ponderacion: row[2] || 0
-      });
+    if (!isCriterionCode(codigo)) {
+      continue;
     }
+
+    const raNumero = Number(String(codigo).match(/^(\d+)/)[1]);
+    const rraaItem = rraa.find((item) => Number(item.numero) === raNumero);
+
+    criterios.push({
+      numero: criterios.length + 1,
+      codigo: String(codigo),
+      nombre: String(codigo),
+      raNumero,
+      raDescripcion: rraaItem ? rraaItem.descripcion : '',
+      ponderacion: pesosRows[21] && pesosRows[21][colIdx] ? pesosRows[21][colIdx] : 0,
+      ponderacionInstituto: pesosRows[21] && pesosRows[21][colIdx + 1] ? pesosRows[21][colIdx + 1] : 0,
+      ponderacionEmpresa: pesosRows[21] && pesosRows[21][colIdx + 2] ? pesosRows[21][colIdx + 2] : 0,
+      colIdx
+    });
   }
 
   return {
@@ -386,9 +397,13 @@ async function saveRraaCriteriosToFile(filePath, rraa, criterios) {
     numero: Number(item.numero) || idx + 1,
     descripcion: String(item.descripcion || '').trim()
   }));
-  const normalizedCriterios = criterios.slice(0, 16).map((item) => ({
-    nombre: String(item.nombre || '').trim(),
-    ponderacion: Number(item.ponderacion) || 0
+  const normalizedCriterios = criterios.map((item) => ({
+    codigo: String(item.codigo || item.nombre || '').trim(),
+    raNumero: Number(item.raNumero) || criterionRaNumber(item.codigo || item.nombre),
+    ponderacion: Number(item.ponderacion) || 0,
+    ponderacionInstituto: Number(item.ponderacionInstituto) || 0,
+    ponderacionEmpresa: Number(item.ponderacionEmpresa) || 0,
+    colIdx: Number.isInteger(item.colIdx) ? item.colIdx : null
   }));
 
   await editWorkbookSheetsXml(filePath, {
@@ -412,12 +427,19 @@ async function saveRraaCriteriosToFile(filePath, rraa, criterios) {
     PESOS: (sheetXml) => {
       let xml = sheetXml;
 
-      for (let idx = 0; idx < 16; idx += 1) {
-        const rowIdx = 5 + idx;
-        const criterio = normalizedCriterios[idx];
-        xml = setXmlCell(xml, rowIdx, 0, criterio ? criterio.nombre : null, 'text');
-        xml = setXmlCell(xml, rowIdx, 2, criterio ? criterio.ponderacion : null, 'number');
-      }
+      normalizedCriterios.forEach((criterio) => {
+        const colIdx = criterio.colIdx ?? findCriterionColumnForSave(criterio, normalizedCriterios);
+
+        if (colIdx === -1) {
+          return;
+        }
+
+        xml = setXmlCell(xml, 3, colIdx, criterio.codigo, 'text');
+        xml = setXmlCell(xml, 21, colIdx, criterio.ponderacion, 'number');
+        xml = setXmlCell(xml, 21, colIdx + 1, criterio.ponderacionInstituto, 'number');
+        xml = setXmlCell(xml, 21, colIdx + 2, criterio.ponderacionEmpresa, 'number');
+        xml = setXmlCell(xml, 23, colIdx, criterio.ponderacionEmpresa > 0 ? 'x' : null, 'text');
+      });
 
       return xml;
     }
@@ -451,6 +473,40 @@ function findRraaStartRow(rows) {
   });
 
   return headerRowIdx === -1 ? -1 : headerRowIdx + 1;
+}
+
+function isCriterionCode(value) {
+  return Boolean(value && /^\d+\.[a-z]\)/i.test(String(value).trim()));
+}
+
+function criterionRaNumber(value) {
+  const match = String(value || '').match(/^(\d+)/);
+  return match ? Number(match[1]) : 0;
+}
+
+function findCriterionColumnForSave(criterion, criterios) {
+  if (!criterion.raNumero) {
+    return -1;
+  }
+
+  const usedColumns = new Set(
+    criterios
+      .map((item) => item.colIdx)
+      .filter((colIdx) => Number.isInteger(colIdx))
+  );
+  const start = 2 + (criterion.raNumero - 1) * 40;
+
+  for (let slot = 0; slot < 13; slot += 1) {
+    const candidate = start + slot * 3;
+
+    if (!usedColumns.has(candidate)) {
+      criterion.colIdx = candidate;
+      usedColumns.add(candidate);
+      return candidate;
+    }
+  }
+
+  return -1;
 }
 
 function normalizeUnidades(unidades) {
@@ -790,9 +846,10 @@ function countExistingRraa(rows, rraaStart) {
 
   for (let i = rraaStart; i < rows.length; i += 1) {
     const row = rows[i] || [];
+    const numero = row[5];
     const descripcion = row[6];
 
-    if (!descripcion || String(descripcion).trim() === '') {
+    if ((!numero || String(numero).trim() === '') && (!descripcion || String(descripcion).trim() === '')) {
       break;
     }
 

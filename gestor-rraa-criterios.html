@@ -647,8 +647,11 @@
                                 <thead>
                                     <tr>
                                         <th style="width: 50px;">Nº</th>
+                                        <th style="width: 90px;">RA</th>
                                         <th>Criterio de Evaluación</th>
-                                        <th style="width: 100px;">Ponderación (%)</th>
+                                        <th style="width: 120px;">Final</th>
+                                        <th style="width: 120px;">Instituto</th>
+                                        <th style="width: 120px;">Empresa</th>
                                         <th style="width: 80px;">Acción</th>
                                     </tr>
                                 </thead>
@@ -664,8 +667,11 @@
                         <!-- AGREGAR NUEVO CRITERIO -->
                         <h3>Agregar Nuevo Criterio</h3>
                         <div class="form-group">
-                            <textarea id="nuevoCriterio" placeholder="Descripción del Criterio de Evaluación" style="flex: 1;"></textarea>
-                            <input type="number" id="nuevoPonderacion" placeholder="Ponderación (%)" min="0" max="100" step="0.01" />
+                            <select id="nuevoCriterioRA" style="min-width: 120px;"></select>
+                            <input type="text" id="nuevoCriterio" placeholder="Código CE: 1.a)" />
+                            <input type="number" id="nuevoPonderacion" placeholder="Final" min="0" max="1" step="0.01" />
+                            <input type="number" id="nuevoPonderacionInstituto" placeholder="Instituto" min="0" max="1" step="0.01" />
+                            <input type="number" id="nuevoPonderacionEmpresa" placeholder="Empresa" min="0" max="1" step="0.01" />
                             <button onclick="agregarCriterio()">➕ Agregar</button>
                         </div>
                     </div>
@@ -784,6 +790,7 @@
                 mostrarTablaCriterios();
                 actualizarStatsRRAA();
                 actualizarStatsCriterios();
+                actualizarOpcionesRA();
                 document.getElementById('uploadArea').style.display = 'none';
                 document.getElementById('mainContent').style.display = 'block';
                 mostrarMensaje(`Archivo conectado: ${result.fileName}`, 'success');
@@ -882,6 +889,7 @@
             raaaActuales = rraa;
             mostrarTablaRRAA();
             actualizarStatsRRAA();
+            actualizarOpcionesRA();
         }
 
         // ===== CARGAR CRITERIOS DESDE HOJA PESOS =====
@@ -889,17 +897,26 @@
             const sheet = workbook.Sheets['PESOS'];
             const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-            // Los criterios están en la columna A, filas 6 a 21
             const criterios = [];
-            for (let i = 5; i < 21; i++) { // Filas 6-21 (índice 5-20)
-                const criterio = json[i] && json[i][0];
-                const ponderacion = json[i] && json[i][2];
+            const headerCriterios = json[3] || [];
+            const ponderaciones = json[21] || [];
 
-                if (criterio && String(criterio).trim() !== '' && typeof criterio === 'string') {
+            for (let colIdx = 0; colIdx < headerCriterios.length; colIdx++) {
+                const codigo = headerCriterios[colIdx];
+
+                if (esCodigoCriterio(codigo)) {
+                    const raNumero = numeroRaDesdeCriterio(codigo);
+                    const rraa = raaaActuales.find(item => Number(item.numero) === raNumero);
                     criterios.push({
                         numero: criterios.length + 1,
-                        nombre: criterio,
-                        ponderacion: ponderacion || 0
+                        codigo: String(codigo),
+                        nombre: String(codigo),
+                        raNumero,
+                        raDescripcion: rraa ? rraa.descripcion : '',
+                        ponderacion: ponderaciones[colIdx] || 0,
+                        ponderacionInstituto: ponderaciones[colIdx + 1] || 0,
+                        ponderacionEmpresa: ponderaciones[colIdx + 2] || 0,
+                        colIdx
                     });
                 }
             }
@@ -907,6 +924,7 @@
             criteriosActuales = criterios;
             mostrarTablaCriterios();
             actualizarStatsCriterios();
+            actualizarOpcionesRA();
         }
 
         // ===== MOSTRAR TABLA RRAA =====
@@ -951,8 +969,15 @@
             tbody.innerHTML = criteriosActuales.map((crit, idx) => `
                 <tr>
                     <td class="row-numero">${crit.numero}</td>
-                    <td><input type="text" value="${crit.nombre}" onchange="criteriosActuales[${idx}].nombre = this.value" /></td>
-                    <td><input type="number" value="${crit.ponderacion || 0}" min="0" max="100" step="0.01" onchange="criteriosActuales[${idx}].ponderacion = parseFloat(this.value)" /></td>
+                    <td>
+                        <select onchange="actualizarCriterioRA(${idx}, this.value)">
+                            ${opcionesRA(crit.raNumero)}
+                        </select>
+                    </td>
+                    <td><input type="text" value="${crit.codigo || crit.nombre}" onchange="criteriosActuales[${idx}].codigo = this.value; criteriosActuales[${idx}].nombre = this.value" title="${crit.raDescripcion || ''}" /></td>
+                    <td><input type="number" value="${crit.ponderacion || 0}" min="0" max="1" step="0.01" onchange="criteriosActuales[${idx}].ponderacion = parseFloat(this.value) || 0" /></td>
+                    <td><input type="number" value="${crit.ponderacionInstituto || 0}" min="0" max="1" step="0.01" onchange="criteriosActuales[${idx}].ponderacionInstituto = parseFloat(this.value) || 0" /></td>
+                    <td><input type="number" value="${crit.ponderacionEmpresa || 0}" min="0" max="1" step="0.01" onchange="criteriosActuales[${idx}].ponderacionEmpresa = parseFloat(this.value) || 0" /></td>
                     <td>
                         <button class="delete" onclick="eliminarCriterio(${idx})">🗑️</button>
                     </td>
@@ -967,6 +992,47 @@
 
         function actualizarStatsCriterios() {
             document.getElementById('totalCriterios').textContent = criteriosActuales.length;
+        }
+
+        function actualizarOpcionesRA() {
+            const select = document.getElementById('nuevoCriterioRA');
+            if (!select) {
+                return;
+            }
+
+            select.innerHTML = listaRANumeros().map((raNumero) => `
+                <option value="${raNumero}">RA ${raNumero}</option>
+            `).join('');
+        }
+
+        function opcionesRA(raNumero) {
+            return listaRANumeros().map((numero) => `
+                <option value="${numero}" ${Number(numero) === Number(raNumero) ? 'selected' : ''}>RA ${numero}</option>
+            `).join('');
+        }
+
+        function listaRANumeros() {
+            const numeros = new Set();
+            raaaActuales.forEach((rraa) => numeros.add(Number(rraa.numero)));
+            criteriosActuales.forEach((criterio) => numeros.add(Number(criterio.raNumero)));
+            return Array.from(numeros).filter(Boolean).sort((a, b) => a - b);
+        }
+
+        function actualizarCriterioRA(idx, value) {
+            const raNumero = Number(value);
+            const rraa = raaaActuales.find(item => Number(item.numero) === raNumero);
+            criteriosActuales[idx].raNumero = raNumero;
+            criteriosActuales[idx].raDescripcion = rraa ? rraa.descripcion : '';
+            criteriosActuales[idx].colIdx = null;
+        }
+
+        function esCodigoCriterio(value) {
+            return Boolean(value && /^\d+\.[a-z]\)/i.test(String(value).trim()));
+        }
+
+        function numeroRaDesdeCriterio(value) {
+            const match = String(value || '').match(/^(\d+)/);
+            return match ? Number(match[1]) : 0;
         }
 
         // ===== AGREGAR RRAA =====
@@ -992,24 +1058,37 @@
 
         // ===== AGREGAR CRITERIO =====
         function agregarCriterio() {
-            const nombre = document.getElementById('nuevoCriterio').value.trim();
+            const raNumero = Number(document.getElementById('nuevoCriterioRA').value);
+            const codigo = document.getElementById('nuevoCriterio').value.trim();
             const ponderacion = parseFloat(document.getElementById('nuevoPonderacion').value);
+            const ponderacionInstituto = parseFloat(document.getElementById('nuevoPonderacionInstituto').value) || 0;
+            const ponderacionEmpresa = parseFloat(document.getElementById('nuevoPonderacionEmpresa').value) || 0;
 
-            if (!nombre || isNaN(ponderacion)) {
+            if (!raNumero || !codigo || isNaN(ponderacion)) {
                 mostrarMensaje('❌ Completa todos los campos', 'error');
                 return;
             }
 
+            const rraa = raaaActuales.find(item => Number(item.numero) === raNumero);
+
             criteriosActuales.push({
                 numero: criteriosActuales.length + 1,
-                nombre: nombre,
-                ponderacion: ponderacion
+                codigo,
+                nombre: codigo,
+                raNumero,
+                raDescripcion: rraa ? rraa.descripcion : '',
+                ponderacion,
+                ponderacionInstituto,
+                ponderacionEmpresa,
+                colIdx: null
             });
 
             mostrarTablaCriterios();
             actualizarStatsCriterios();
             document.getElementById('nuevoCriterio').value = '';
             document.getElementById('nuevoPonderacion').value = '';
+            document.getElementById('nuevoPonderacionInstituto').value = '';
+            document.getElementById('nuevoPonderacionEmpresa').value = '';
             mostrarMensaje('✅ Criterio agregado', 'success');
         }
 
