@@ -339,6 +339,7 @@ function loadRraaCriteriosFromSelectedFile() {
       numero: criterios.length + 1,
       codigo: String(codigo),
       nombre: String(codigo),
+      originalCodigo: String(codigo),
       raNumero,
       raDescripcion: rraaItem ? rraaItem.descripcion : '',
       ponderacion: pesosRows[21] && pesosRows[21][colIdx] ? pesosRows[21][colIdx] : 0,
@@ -553,12 +554,13 @@ async function saveRraaCriteriosToFile(filePath, rraa, criterios, ponderacionesU
   }));
 
   const normalizedCriterios = criterios.map((item) => ({
-    codigo: String(item.codigo || item.nombre || '').trim(),
+    codigo: normalizeCriterionCodeForPesos(item.codigo || item.nombre),
+    originalCodigo: normalizeCriterionCodeForPesos(item.originalCodigo || item.codigo || item.nombre),
     raNumero: Number(item.raNumero) || criterionRaNumber(item.codigo || item.nombre),
     texto: String(item.texto || '').trim(),
-    ponderacion: Number(item.ponderacion) || 0,
-    ponderacionInstituto: Number(item.ponderacionInstituto) || 0,
-    ponderacionEmpresa: Number(item.ponderacionEmpresa) || 0,
+    ponderacion: parseDecimal(item.ponderacion),
+    ponderacionInstituto: parseDecimal(item.ponderacionInstituto),
+    ponderacionEmpresa: parseDecimal(item.ponderacionEmpresa),
     colIdx: Number.isInteger(item.colIdx) ? item.colIdx : null
   }));
 
@@ -577,9 +579,11 @@ async function saveRraaCriteriosToFile(filePath, rraa, criterios, ponderacionesU
 
       // Actualizar texto de criterios SOLO si encontramos su fila específica
       normalizedCriterios.forEach((criterio) => {
-        const rowIdx = findCriterionTextRow(datosRows, criterio.codigo);
+        const rowIdx = findCriterionTextRow(datosRows, criterio.originalCodigo) !== -1
+          ? findCriterionTextRow(datosRows, criterio.originalCodigo)
+          : findCriterionTextRow(datosRows, criterio.codigo);
         if (rowIdx !== -1) {
-          xml = setXmlCell(xml, rowIdx, 21, criterio.codigo, 'text');
+          xml = setXmlCell(xml, rowIdx, 21, stripCriterionClosingParen(criterio.codigo), 'text');
           xml = setXmlCell(xml, rowIdx, 22, criterio.texto || null, 'text');
         }
       });
@@ -605,9 +609,9 @@ async function saveRraaCriteriosToFile(filePath, rraa, criterios, ponderacionesU
         Object.entries(unidad.ponderaciones).forEach(([colKey, values]) => {
           const colIdx = Number(colKey);
           if (colIdx >= 0) {
-            xml = setXmlCell(xml, unidad.rowIdx, colIdx, values.ponderacion, 'number');
-            xml = setXmlCell(xml, unidad.rowIdx, colIdx + 1, values.ponderacionInstituto, 'number');
-            xml = setXmlCell(xml, unidad.rowIdx, colIdx + 2, values.ponderacionEmpresa, 'number');
+            xml = setXmlCell(xml, unidad.rowIdx, colIdx, parseDecimal(values.ponderacion), 'number');
+            xml = setXmlCell(xml, unidad.rowIdx, colIdx + 1, parseDecimal(values.ponderacionInstituto), 'number');
+            xml = setXmlCell(xml, unidad.rowIdx, colIdx + 2, parseDecimal(values.ponderacionEmpresa), 'number');
           }
         });
       });
@@ -819,8 +823,8 @@ function normalizeUnitWeights(ponderacionesUnidad) {
           return;
         }
 
-        const instituto = Number(values.ponderacionInstituto) || 0;
-        const empresa = Number(values.ponderacionEmpresa) || 0;
+        const instituto = parseDecimal(values.ponderacionInstituto);
+        const empresa = parseDecimal(values.ponderacionEmpresa);
         ponderaciones[colIdx] = {
           ponderacionInstituto: instituto,
           ponderacionEmpresa: empresa,
@@ -839,8 +843,31 @@ function isCriterionCode(value) {
   return Boolean(value && /^\d+\.[a-z]\)/i.test(String(value).trim()));
 }
 
+function normalizeCriterionCodeForPesos(value) {
+  const text = String(value || '').trim();
+
+  if (!text) {
+    return '';
+  }
+
+  return text.endsWith(')') ? text : `${text})`;
+}
+
+function stripCriterionClosingParen(value) {
+  return String(value || '').trim().replace(/\)$/u, '');
+}
+
 function normalizeCriterionCode(value) {
-  return String(value || '').trim().replace(/\)$/u, '').toLowerCase();
+  return stripCriterionClosingParen(value).toLowerCase();
+}
+
+function parseDecimal(value) {
+  if (value === null || value === undefined || value === '') {
+    return 0;
+  }
+
+  const number = Number(String(value).replace(',', '.'));
+  return Number.isNaN(number) ? 0 : number;
 }
 
 function extractCriterionTexts(rows) {

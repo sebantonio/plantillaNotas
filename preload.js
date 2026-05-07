@@ -7,8 +7,12 @@ contextBridge.exposeInMainWorld('electronExcel', {
   getUnidades: () => ipcRenderer.invoke('excel:getUnidades'),
   saveUnidades: (unidades) => ipcRenderer.invoke('excel:saveUnidades', unidades),
   getRraaCriterios: () => ipcRenderer.invoke('excel:getRraaCriterios'),
-  saveRraaCriterios: (rraa, criterios, ponderacionesUnidad = []) =>
-    ipcRenderer.invoke('excel:saveRraaCriterios', { rraa, criterios, ponderacionesUnidad }),
+  saveRraaCriterios: (payloadOrRraa, criterios, ponderacionesUnidad = []) => {
+    const payload = Array.isArray(payloadOrRraa)
+      ? { rraa: payloadOrRraa, criterios, ponderacionesUnidad }
+      : payloadOrRraa;
+    return ipcRenderer.invoke('excel:saveRraaCriterios', payload);
+  },
   getNotasActividad: (payload) => ipcRenderer.invoke('excel:getNotasActividad', payload),
   saveNotasActividad: (payload) => ipcRenderer.invoke('excel:saveNotasActividad', payload),
   openExternal: (url) => ipcRenderer.invoke('app:openExternal', url)
