@@ -90,6 +90,45 @@
             font-weight: 700;
         }
 
+        .header-actions {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .page-nav {
+            display: flex;
+            gap: 8px;
+        }
+
+        .nav-button,
+        .nav-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 38px;
+            padding: 8px 13px;
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.82);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            font: inherit;
+            font-size: 0.9rem;
+            font-weight: 800;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+        }
+
+        .nav-button:hover,
+        .nav-link:hover {
+            background: #ffffff;
+            border-color: rgba(37, 99, 235, 0.45);
+            transform: translateY(-1px);
+        }
+
         .hero {
             display: grid;
             grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
@@ -376,6 +415,16 @@
                 align-self: flex-start;
             }
 
+            .header-actions,
+            .page-nav {
+                width: 100%;
+            }
+
+            .page-nav .nav-button,
+            .page-nav .nav-link {
+                flex: 1;
+            }
+
             .primary-actions,
             .workflow {
                 grid-template-columns: 1fr;
@@ -403,7 +452,13 @@
                     <p>Panel de trabajo para el curso actual</p>
                 </div>
             </div>
-            <div class="version">v0.1.0</div>
+            <div class="header-actions">
+                <nav class="page-nav" aria-label="Navegación">
+                    <button class="nav-button" type="button" onclick="window.history.back()">← Atrás</button>
+                    <a class="nav-link" href="index.html">⌂ Inicio</a>
+                </nav>
+                <div class="version">v0.1.0</div>
+            </div>
         </header>
 
         <section class="hero" aria-labelledby="daily-title">
