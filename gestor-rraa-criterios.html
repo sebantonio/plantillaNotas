@@ -817,6 +817,7 @@
         const isElectronMode = Boolean(window.electronExcel);
         let autoSaveTimeout = null;
         let hayChangesSinGuardar = false;
+        const AUTO_SAVE_DELAY_MS = 30000;
 
         // ===== VERIFICACIÓN DE LIBRERÍA XLSX =====
         function checkXLSX() {
@@ -1626,10 +1627,10 @@
                 clearTimeout(autoSaveTimeout);
             }
 
-            // Guardar automáticamente después de 2 segundos de inactividad
+            // Guardar automaticamente despues de 30 segundos de inactividad
             autoSaveTimeout = setTimeout(() => {
                 guardarCambiosAutomaticamente();
-            }, 2000);
+            }, AUTO_SAVE_DELAY_MS);
         }
 
         function mostrarEstadoGuardado(estado, mensaje) {
