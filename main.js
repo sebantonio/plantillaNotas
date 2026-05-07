@@ -1,6 +1,8 @@
 const path = require('path');
 const fs = require('fs');
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const isElectronRuntime = Boolean(process.versions.electron);
+const electron = isElectronRuntime ? require('electron') : {};
+const { app, BrowserWindow, dialog, ipcMain, shell } = electron;
 const XLSX = require('xlsx');
 const JSZip = require('jszip');
 
@@ -61,6 +63,7 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 }
 
+if (isElectronRuntime) {
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
@@ -242,6 +245,7 @@ ipcMain.handle('excel:getNotasEvaluacion', async (_event, payload = {}) => {
 ipcMain.handle('app:openExternal', async (_event, url) => {
   await shell.openExternal(url);
 });
+}
 
 function findDefaultExcelPath() {
   const candidate = path.join(__dirname, defaultExcelName);
@@ -1654,3 +1658,137 @@ function normaliseDateForUi(value) {
 
   return String(value);
 }
+
+async function commandSelectFile(filePath) {
+  if (!filePath) {
+    return null;
+  }
+
+  selectedExcelPath = filePath;
+  return loadAlumnosFromSelectedFile();
+}
+
+function setSelectedExcelPath(filePath) {
+  selectedExcelPath = filePath || null;
+}
+
+async function commandGetSelectedFile() {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  return selectedExcelPath ? loadAlumnosFromSelectedFile() : null;
+}
+
+async function commandSaveAlumnos(alumnos) {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  if (!selectedExcelPath) {
+    throw new Error('No hay ningun archivo Excel seleccionado.');
+  }
+
+  await saveAlumnosToFile(selectedExcelPath, alumnos);
+  return loadAlumnosFromSelectedFile();
+}
+
+async function commandGetUnidades() {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  return selectedExcelPath ? loadUnidadesFromSelectedFile() : null;
+}
+
+async function commandSaveUnidades(unidades) {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  if (!selectedExcelPath) {
+    throw new Error('No hay ningun archivo Excel seleccionado.');
+  }
+
+  await saveUnidadesToFile(selectedExcelPath, unidades);
+  return loadUnidadesFromSelectedFile();
+}
+
+async function commandGetRraaCriterios() {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  return selectedExcelPath ? loadRraaCriteriosFromSelectedFile() : null;
+}
+
+async function commandSaveRraaCriterios(payload) {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  if (!selectedExcelPath) {
+    throw new Error('No hay ningun archivo Excel seleccionado.');
+  }
+
+  const rraa = Array.isArray(payload && payload.rraa) ? payload.rraa : [];
+  const criterios = Array.isArray(payload && payload.criterios) ? payload.criterios : [];
+  const ponderacionesUnidad = Array.isArray(payload && payload.ponderacionesUnidad) ? payload.ponderacionesUnidad : [];
+
+  await saveRraaCriteriosToFile(selectedExcelPath, rraa, criterios, ponderacionesUnidad);
+  return loadRraaCriteriosFromSelectedFile();
+}
+
+async function commandGetNotasActividad(payload = {}) {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  return selectedExcelPath
+    ? loadNotasActividadFromSelectedFile(payload.unidad || 'U1', payload.tipo || 'practicas', Number(payload.actividad) || 1)
+    : null;
+}
+
+async function commandSaveNotasActividad(payload) {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  if (!selectedExcelPath) {
+    throw new Error('No hay ningun archivo Excel seleccionado.');
+  }
+
+  await saveNotasActividadToFile(
+    selectedExcelPath,
+    payload.unidad,
+    payload.tipo,
+    Number(payload.actividad) || 1,
+    payload.notas
+  );
+  return loadNotasActividadFromSelectedFile(payload.unidad, payload.tipo, Number(payload.actividad) || 1);
+}
+
+async function commandGetNotasEvaluacion(payload = {}) {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  return selectedExcelPath ? loadNotasEvaluacionFromSelectedFile(payload.evaluacion || '1') : null;
+}
+
+module.exports = {
+  commands: {
+    selectFile: commandSelectFile,
+    getSelectedFile: commandGetSelectedFile,
+    saveAlumnos: commandSaveAlumnos,
+    getUnidades: commandGetUnidades,
+    saveUnidades: commandSaveUnidades,
+    getRraaCriterios: commandGetRraaCriterios,
+    saveRraaCriterios: commandSaveRraaCriterios,
+    getNotasActividad: commandGetNotasActividad,
+    saveNotasActividad: commandSaveNotasActividad,
+    getNotasEvaluacion: commandGetNotasEvaluacion
+  },
+  findDefaultExcelPath,
+  setSelectedExcelPath
+};
