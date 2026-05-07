@@ -536,23 +536,44 @@ function findEvaluationSheetName(workbook, evaluacion) {
 }
 
 function findEvaluationRaColumns(sheet, rows) {
-  const raHeaderRow = rows[15] || [];
   const summaryRow = rows[16] || [];
   const columns = [];
 
   summaryRow.forEach((value, colIdx) => {
     if (normalizePlainText(value) === 'NOTA CE') {
-      const label = getCellDisplay(sheet, 15, colIdx) || `RRAA ${columns.length + 1}`;
+      const raNumber = findEvaluationRaNumberForBlock(rows, colIdx);
+      const label = raNumber ? `RRAA ${raNumber}` : `RRAA ${columns.length + 1}`;
       columns.push({
         colIdx,
         address: columnName(colIdx),
         label,
+        numero: raNumber || columns.length + 1,
         peso: getCellDisplay(sheet, 13, colIdx) || ''
       });
     }
   });
 
   return columns;
+}
+
+function findEvaluationRaNumberForBlock(rows, notaCeColIdx) {
+  const codeRow = rows[17] || [];
+
+  for (let colIdx = notaCeColIdx + 1; colIdx < codeRow.length; colIdx += 1) {
+    const value = codeRow[colIdx];
+    const normalizedValue = normalizePlainText(value);
+
+    if (normalizedValue === 'NOTA CE' || normalizedValue === 'NOTA FINAL') {
+      break;
+    }
+
+    const match = String(value || '').trim().match(/^(\d+)/);
+    if (match) {
+      return Number(match[1]);
+    }
+  }
+
+  return null;
 }
 
 function findEvaluationFinalColumn(sheet, rows) {
