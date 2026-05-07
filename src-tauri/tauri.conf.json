@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "identifier": "es.seba.plantillanotas",
   "build": {
-    "frontendDist": "../"
+    "beforeDevCommand": "node scripts/prepare-tauri-web.js",
+    "beforeBuildCommand": "node scripts/prepare-tauri-web.js",
+    "frontendDist": "../tauri-web"
   },
   "app": {
     "withGlobalTauri": true,

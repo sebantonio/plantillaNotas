@@ -5,10 +5,6 @@ description = "Aplicacion local para gestionar una plantilla Excel de notas."
 authors = ["Sebantonio"]
 edition = "2021"
 
-[lib]
-name = "plantilla_notas_local_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
-
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

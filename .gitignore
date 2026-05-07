@@ -1,5 +1,6 @@
 node_modules/
 dist/
+tauri-web/
 src-tauri/target/
 .tauri-selected-excel.json
 *.log
