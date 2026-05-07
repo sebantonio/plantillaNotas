@@ -253,7 +253,7 @@ function findDefaultExcelPath() {
 }
 
 function loadAlumnosFromSelectedFile() {
-  const workbook = XLSX.readFile(selectedExcelPath, { cellDates: true });
+  const workbook = XLSX.readFile(selectedExcelPath, { cellDates: true, sheets: ['DATOS'] });
 
   if (!workbook.SheetNames.includes('DATOS')) {
     throw new Error('El archivo no tiene la hoja "DATOS" esperada.');
@@ -293,7 +293,7 @@ function loadAlumnosFromSelectedFile() {
 }
 
 function loadUnidadesFromSelectedFile() {
-  const workbook = XLSX.readFile(selectedExcelPath, { cellDates: true });
+  const workbook = XLSX.readFile(selectedExcelPath, { cellDates: true, sheets: ['DATOS'] });
 
   if (!workbook.SheetNames.includes('DATOS')) {
     throw new Error('El archivo no tiene la hoja "DATOS" esperada.');
@@ -334,7 +334,7 @@ function loadUnidadesFromSelectedFile() {
 }
 
 function loadRraaCriteriosFromSelectedFile() {
-  const workbook = XLSX.readFile(selectedExcelPath, { cellDates: true });
+  const workbook = XLSX.readFile(selectedExcelPath, { cellDates: true, sheets: ['DATOS', 'PESOS'] });
 
   if (!workbook.SheetNames.includes('DATOS') || !workbook.SheetNames.includes('PESOS')) {
     throw new Error('El archivo debe tener las hojas DATOS y PESOS.');
@@ -426,7 +426,7 @@ function loadRraaCriteriosFromSelectedFile() {
 }
 
 function loadNotasActividadFromSelectedFile(unidad = 'U1', tipo = 'practicas', actividad = 1) {
-  const workbook = XLSX.readFile(selectedExcelPath, { cellDates: true });
+  const workbook = XLSX.readFile(selectedExcelPath, { cellDates: true, sheets: [unidad] });
   const unidades = listUnitSheets(workbook);
   const selectedUnidad = unidades.find((item) => item.codigo === unidad)?.codigo || unidades[0]?.codigo || unidad;
 
@@ -460,7 +460,7 @@ function loadNotasActividadFromSelectedFile(unidad = 'U1', tipo = 'practicas', a
 }
 
 async function saveNotasActividadToFile(filePath, unidad, tipo, actividad, notas) {
-  const workbook = XLSX.readFile(filePath, { cellDates: true });
+  const workbook = XLSX.readFile(filePath, { cellDates: true, sheets: [unidad] });
 
   if (!workbook.SheetNames.includes(unidad)) {
     throw new Error(`El archivo no tiene la hoja "${unidad}".`);
@@ -499,7 +499,8 @@ async function saveNotasActividadToFile(filePath, unidad, tipo, actividad, notas
 }
 
 function loadNotasEvaluacionFromSelectedFile(evaluacion = '1') {
-  const workbook = XLSX.readFile(selectedExcelPath, { cellDates: true, cellFormula: true });
+  const workbook = XLSX.readFile(selectedExcelPath, { cellDates: true, cellFormula: true, sheets: ['DATOS'] });
+  const fullWorkbook = XLSX.readFile(selectedExcelPath, { cellDates: true, cellFormula: true });
   const sheetName = findEvaluationSheetName(workbook, evaluacion);
 
   if (!sheetName) {
@@ -745,7 +746,7 @@ function getEvaluationNumber(sheet, rowIdx, colIdx) {
 }
 
 async function saveAlumnosToFile(filePath, alumnos) {
-  const workbook = XLSX.readFile(filePath, { cellDates: true });
+  const workbook = XLSX.readFile(filePath, { cellDates: true, sheets: ['DATOS'] });
 
   if (!workbook.SheetNames.includes('DATOS')) {
     throw new Error('El archivo no tiene la hoja "DATOS" esperada.');
@@ -785,7 +786,7 @@ async function saveAlumnosToFile(filePath, alumnos) {
 }
 
 async function saveUnidadesToFile(filePath, unidades) {
-  const workbook = XLSX.readFile(filePath, { cellDates: true });
+  const workbook = XLSX.readFile(filePath, { cellDates: true, sheets: ['DATOS'] });
 
   if (!workbook.SheetNames.includes('DATOS')) {
     throw new Error('El archivo no tiene la hoja "DATOS" esperada.');
@@ -824,7 +825,7 @@ async function saveUnidadesToFile(filePath, unidades) {
 }
 
 async function saveRraaCriteriosToFile(filePath, rraa, criterios, ponderacionesUnidad) {
-  const workbook = XLSX.readFile(filePath, { cellDates: true });
+  const workbook = XLSX.readFile(filePath, { cellDates: true, sheets: ['DATOS', 'PESOS'] });
 
   if (!workbook.SheetNames.includes('DATOS') || !workbook.SheetNames.includes('PESOS')) {
     throw new Error('El archivo debe tener las hojas DATOS y PESOS.');

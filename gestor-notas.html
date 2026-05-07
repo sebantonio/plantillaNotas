@@ -392,6 +392,20 @@
             unidadSelect.addEventListener("change", () => loadNotasConGuardado({ keepActivity: false }));
             tipoSelect.addEventListener("change", () => loadNotasConGuardado({ keepActivity: false }));
             actividadSelect.addEventListener("change", () => loadNotasConGuardado());
+
+            // Event delegation para inputs de notas (optimización: 1 listener en lugar de N)
+            notasBody.addEventListener("input", (event) => {
+                const input = event.target;
+                if (input.classList.contains("nota-input")) {
+                    const row = input.closest("tr");
+                    const rowIdx = Array.from(notasBody.children).indexOf(row);
+                    if (rowIdx >= 0 && currentNotes[rowIdx]) {
+                        currentNotes[rowIdx].nota = input.value;
+                        marcarCambio();
+                    }
+                }
+            });
+
             loadNotas();
         });
 
@@ -494,13 +508,13 @@
         }
 
         function renderTable() {
-            notasBody.innerHTML = "";
-
             if (!currentNotes.length) {
                 notasBody.innerHTML = '<tr><td class="empty" colspan="3">No hay alumnos en esta actividad.</td></tr>';
                 return;
             }
 
+            // Usar DocumentFragment para batch de reflows
+            const fragment = document.createDocumentFragment();
             currentNotes.forEach((item, idx) => {
                 const row = document.createElement("tr");
                 row.innerHTML = `
@@ -516,14 +530,12 @@
                         >
                     </td>
                 `;
-
-                row.querySelector("input").addEventListener("input", (event) => {
-                    currentNotes[idx].nota = event.target.value;
-                    marcarCambio();
-                });
-
-                notasBody.appendChild(row);
+                fragment.appendChild(row);
             });
+
+            // Una sola operación de DOM en lugar de N
+            notasBody.textContent = '';
+            notasBody.appendChild(fragment);
         }
 
         async function saveNotas(options = {}) {
