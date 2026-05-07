@@ -2,6 +2,8 @@
 
 Esta version permite abrir el frontend como una aplicacion de escritorio y guardar cambios directamente en un Excel del ordenador.
 
+Para una explicacion exhaustiva del proceso, arquitectura, comandos, empaquetado `.exe` y errores frecuentes, consulta `DOCUMENTACION_APP_LOCAL_ELECTRON.md`.
+
 ## Que necesitas
 
 - Node.js instalado en Windows.
@@ -14,6 +16,19 @@ Esta version permite abrir el frontend como una aplicacion de escritorio y guard
 npm install
 npm start
 ```
+
+Tambien puedes abrirla con doble clic en `Abrir Gestor Local.bat`.
+
+## Crear una aplicacion instalable
+
+Ejecuta:
+
+```bash
+npm install
+npm run dist
+```
+
+El resultado aparecera en la carpeta `dist/`. Se generara un instalador de Windows y una version portable.
 
 ## Flujo de uso
 
