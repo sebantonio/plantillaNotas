@@ -16,6 +16,7 @@
       "gestor-alumnos.html",
       "gestor-rraa-criterios.html",
       "gestor-unidades.html",
+      "gestor-notas.html",
       "main.js",
       "preload.js",
       "package.json"

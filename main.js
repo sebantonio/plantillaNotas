@@ -7,6 +7,12 @@ const JSZip = require('jszip');
 let mainWindow;
 let selectedExcelPath = null;
 const defaultExcelName = 'plantilla313_dual - copia.xlsx';
+const ACTIVITY_TYPES = [
+  { key: 'practicas', label: 'Practicas', baseCol: 0 },
+  { key: 'memorias', label: 'Memorias', baseCol: 112 },
+  { key: 'otros', label: 'Otras actividades', baseCol: 223 },
+  { key: 'controles', label: 'Control teorico/practico', baseCol: 334 }
+];
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -375,6 +381,79 @@ function loadRraaCriteriosFromSelectedFile() {
   };
 }
 
+function loadNotasActividadFromSelectedFile(unidad = 'U1', tipo = 'practicas', actividad = 1) {
+  const workbook = XLSX.readFile(selectedExcelPath, { cellDates: true });
+  const unidades = listUnitSheets(workbook);
+  const selectedUnidad = unidades.find((item) => item.codigo === unidad)?.codigo || unidades[0]?.codigo || unidad;
+
+  if (!workbook.SheetNames.includes(selectedUnidad)) {
+    throw new Error(`El archivo no tiene la hoja "${selectedUnidad}".`);
+  }
+
+  const sheet = workbook.Sheets[selectedUnidad];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+  const selectedType = getActivityType(tipo);
+  const blocks = findActivityBlocks(rows, selectedType.key);
+  const selectedBlock = blocks.find((block) => Number(block.numero) === Number(actividad)) || blocks[0] || null;
+  const notas = selectedBlock ? extractActivityNotes(rows, selectedBlock) : [];
+
+  return {
+    filePath: selectedExcelPath,
+    fileName: path.basename(selectedExcelPath),
+    unidad: selectedUnidad,
+    tipo: selectedType.key,
+    actividad: selectedBlock ? selectedBlock.numero : Number(actividad) || 1,
+    unidades,
+    tipos: ACTIVITY_TYPES.map((item) => ({
+      key: item.key,
+      label: item.label,
+      actividades: findActivityBlocks(rows, item.key).map(formatActivityBlock)
+    })),
+    actividades: blocks.map(formatActivityBlock),
+    notas,
+    block: selectedBlock ? formatActivityBlock(selectedBlock) : null
+  };
+}
+
+async function saveNotasActividadToFile(filePath, unidad, tipo, actividad, notas) {
+  const workbook = XLSX.readFile(filePath, { cellDates: true });
+
+  if (!workbook.SheetNames.includes(unidad)) {
+    throw new Error(`El archivo no tiene la hoja "${unidad}".`);
+  }
+
+  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[unidad], { header: 1, defval: null });
+  const selectedType = getActivityType(tipo);
+  const block = findActivityBlocks(rows, selectedType.key).find((item) => Number(item.numero) === Number(actividad));
+
+  if (!block) {
+    throw new Error(`No se encontro la actividad ${actividad} de ${selectedType.label} en ${unidad}.`);
+  }
+
+  await editWorkbookSheetsXml(filePath, {
+    [unidad]: (sheetXml) => {
+      let xml = sheetXml;
+
+      notas.forEach((item) => {
+        const rowIdx = Number(item.rowIdx);
+
+        if (!Number.isInteger(rowIdx) || rowIdx < block.firstStudentRow) {
+          return;
+        }
+
+        const existingName = rows[rowIdx] && rows[rowIdx][block.nameCol];
+        if (!existingName || String(existingName).trim() === '') {
+          return;
+        }
+
+        xml = setXmlCell(xml, rowIdx, block.noteCol, normalizeGradeValue(item.nota), 'number');
+      });
+
+      return xml;
+    }
+  });
+}
+
 async function saveAlumnosToFile(filePath, alumnos) {
   const workbook = XLSX.readFile(filePath, { cellDates: true });
 
@@ -536,6 +615,147 @@ async function saveRraaCriteriosToFile(filePath, rraa, criterios, ponderacionesU
       return xml;
     }
   });
+}
+
+function listUnitSheets(workbook) {
+  const unitsFromDatos = {};
+
+  if (workbook.Sheets.DATOS) {
+    const datosRows = XLSX.utils.sheet_to_json(workbook.Sheets.DATOS, { header: 1, defval: null });
+    const unidadesStart = findUnidadesStartRow(datosRows);
+
+    if (unidadesStart !== -1) {
+      for (let idx = 0; idx < 16; idx += 1) {
+        const row = datosRows[unidadesStart + idx] || [];
+        const codigo = String(row[8] || `U${idx + 1}`).trim();
+        const nombre = String(row[9] || '').trim();
+
+        if (codigo) {
+          unitsFromDatos[codigo.toUpperCase()] = nombre;
+        }
+      }
+    }
+  }
+
+  return workbook.SheetNames
+    .filter((name) => /^U\d+$/i.test(name))
+    .sort((a, b) => Number(a.replace(/\D/g, '')) - Number(b.replace(/\D/g, '')))
+    .map((codigo) => {
+      const nombre = unitsFromDatos[codigo.toUpperCase()] || '';
+      return {
+        codigo,
+        nombre,
+        label: nombre ? `${codigo} - ${nombre}` : codigo
+      };
+    });
+}
+
+function getActivityType(tipo) {
+  return ACTIVITY_TYPES.find((item) => item.key === tipo) || ACTIVITY_TYPES[0];
+}
+
+function findActivityBlocks(rows, tipoKey) {
+  const activityType = getActivityType(tipoKey);
+  const blocks = [];
+
+  for (let rowIdx = 0; rowIdx < rows.length - 4; rowIdx += 1) {
+    const numberCell = rows[rowIdx + 1] && rows[rowIdx + 1][activityType.baseCol + 1];
+    const activityNumber = Number(numberCell);
+
+    if (numberCell === null || numberCell === undefined || numberCell === '' || Number.isNaN(activityNumber)) {
+      continue;
+    }
+
+    const headerRow = rows[rowIdx + 3] || [];
+    const nameCol = findActivityHeaderCol(headerRow, activityType.baseCol, 'NOMBRE Y APELLIDOS');
+    const noteCol = findActivityHeaderCol(headerRow, activityType.baseCol, 'NOTA FINAL');
+
+    if (nameCol === -1 || noteCol === -1) {
+      continue;
+    }
+
+    blocks.push({
+      tipo: activityType.key,
+      tipoLabel: activityType.label,
+      numero: activityNumber,
+      titleRow: rowIdx,
+      numberRow: rowIdx + 1,
+      headerRow: rowIdx + 3,
+      firstStudentRow: rowIdx + 4,
+      nameCol,
+      noteCol
+    });
+  }
+
+  return blocks;
+}
+
+function findActivityHeaderCol(row, startCol, expectedText) {
+  const normalizedExpected = normalizePlainText(expectedText);
+
+  for (let colIdx = startCol; colIdx < startCol + 8; colIdx += 1) {
+    if (normalizePlainText(row[colIdx]).includes(normalizedExpected)) {
+      return colIdx;
+    }
+  }
+
+  return -1;
+}
+
+function extractActivityNotes(rows, block) {
+  const notes = [];
+
+  for (let rowIdx = block.firstStudentRow; rowIdx < rows.length; rowIdx += 1) {
+    const row = rows[rowIdx] || [];
+    const nombre = row[block.nameCol];
+
+    if (!nombre || String(nombre).trim() === '' || String(nombre).trim() === '0') {
+      break;
+    }
+
+    notes.push({
+      numero: notes.length + 1,
+      rowIdx,
+      nombre: String(nombre).trim(),
+      nota: formatValueForUi(row[block.noteCol])
+    });
+  }
+
+  return notes;
+}
+
+function formatActivityBlock(block) {
+  return {
+    numero: block.numero,
+    label: `${block.tipoLabel} ${block.numero}`,
+    firstStudentRow: block.firstStudentRow,
+    noteCol: block.noteCol
+  };
+}
+
+function normalizeGradeValue(value) {
+  if (value === null || value === undefined || String(value).trim() === '') {
+    return null;
+  }
+
+  const numeric = Number(String(value).replace(',', '.'));
+  return Number.isNaN(numeric) ? null : numeric;
+}
+
+function formatValueForUi(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  return String(value).replace('.', ',');
+}
+
+function normalizePlainText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .trim();
 }
 
 function findHeaderRow(rows, text) {

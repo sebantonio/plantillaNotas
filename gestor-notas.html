@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notas de Actividades - Excel</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            min-height: 100vh;
+            padding: 20px;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .container {
+            max-width: 1220px;
+            margin: 0 auto;
+            overflow: hidden;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 15px 50px rgba(0,0,0,0.25);
+        }
+
+        .page-nav {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            background: #f8f9ff;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .nav-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .nav-button,
+        .nav-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 38px;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.92em;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .nav-button {
+            color: #667eea;
+            background: white;
+            border: 2px solid #667eea;
+            cursor: pointer;
+        }
+
+        .nav-link {
+            color: white;
+            background: #667eea;
+            border: 2px solid #667eea;
+        }
+
+        .header {
+            padding: 40px 30px;
+            color: white;
+            text-align: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .header h1 {
+            margin-bottom: 10px;
+            font-size: 2.2em;
+        }
+
+        .header p {
+            opacity: 0.92;
+            font-size: 1.05em;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .message {
+            display: none;
+            margin-bottom: 18px;
+            padding: 14px 18px;
+            border-radius: 6px;
+        }
+
+        .message.show {
+            display: block;
+        }
+
+        .message.success {
+            color: #155724;
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.error {
+            color: #721c24;
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+
+        .message.info {
+            color: #0c5460;
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(150px, 220px) auto;
+            gap: 14px;
+            align-items: end;
+            margin-bottom: 22px;
+            padding: 18px;
+            background: #f8f9ff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+
+        .field label {
+            display: block;
+            margin-bottom: 7px;
+            color: #4b5563;
+            font-size: 0.9em;
+            font-weight: 700;
+        }
+
+        select,
+        input[type="text"] {
+            width: 100%;
+            min-height: 42px;
+            padding: 9px 10px;
+            border: 1px solid #d7d7d7;
+            border-radius: 6px;
+            font: inherit;
+            background: white;
+        }
+
+        select:focus,
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.13);
+        }
+
+        .button-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 18px;
+        }
+
+        button {
+            min-height: 42px;
+            padding: 10px 18px;
+            color: white;
+            font: inherit;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        button.secondary {
+            color: #667eea;
+            background: white;
+            border: 2px solid #667eea;
+        }
+
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .summary-item {
+            padding: 15px;
+            background: #f8f9ff;
+            border-left: 4px solid #667eea;
+            border-radius: 8px;
+        }
+
+        .summary-item span {
+            display: block;
+            margin-bottom: 5px;
+            color: #6b7280;
+            font-size: 0.88em;
+        }
+
+        .summary-item strong {
+            color: #667eea;
+            font-size: 1.1em;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        th {
+            padding: 13px 14px;
+            color: white;
+            text-align: left;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        td {
+            padding: 11px 14px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        tr:hover {
+            background: #f8f9ff;
+        }
+
+        .col-numero {
+            width: 70px;
+            text-align: center;
+        }
+
+        .col-nota {
+            width: 150px;
+        }
+
+        .numero {
+            color: #667eea;
+            font-weight: 800;
+            text-align: center;
+        }
+
+        .nota-input {
+            width: 100%;
+            max-width: 110px;
+            min-height: 38px;
+            text-align: center;
+        }
+
+        .empty {
+            padding: 28px;
+            color: #6b7280;
+            text-align: center;
+        }
+
+        @media (max-width: 800px) {
+            body {
+                padding: 10px;
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            .controls {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="page-nav" aria-label="Navegacion">
+            <div class="nav-group">
+                <button class="nav-button" type="button" onclick="window.history.back()">Atras</button>
+                <a class="nav-link" href="index.html">Inicio</a>
+            </div>
+            <a class="nav-link" href="gestor-rraa-criterios.html">RRAA y CE</a>
+        </nav>
+
+        <header class="header">
+            <h1>Notas de Actividades</h1>
+            <p>Introduce la nota final de practicas, memorias, otras actividades y controles por unidad.</p>
+        </header>
+
+        <main class="content">
+            <div id="message" class="message"></div>
+
+            <section class="controls" aria-label="Seleccion de actividad">
+                <div class="field">
+                    <label for="unidadSelect">Unidad</label>
+                    <select id="unidadSelect"></select>
+                </div>
+                <div class="field">
+                    <label for="tipoSelect">Tipo de actividad</label>
+                    <select id="tipoSelect"></select>
+                </div>
+                <div class="field">
+                    <label for="actividadSelect">Actividad</label>
+                    <select id="actividadSelect"></select>
+                </div>
+                <button class="secondary" type="button" id="reloadButton">Recargar</button>
+            </section>
+
+            <section class="summary" aria-label="Resumen">
+                <div class="summary-item">
+                    <span>Archivo</span>
+                    <strong id="fileName">-</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Actividad</span>
+                    <strong id="activityName">-</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Alumnos</span>
+                    <strong id="studentCount">0</strong>
+                </div>
+            </section>
+
+            <section>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="col-numero">N</th>
+                                <th>Alumno</th>
+                                <th class="col-nota">Nota final</th>
+                            </tr>
+                        </thead>
+                        <tbody id="notasBody">
+                            <tr>
+                                <td class="empty" colspan="3">Cargando datos...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="button-row">
+                    <button class="secondary" type="button" id="clearButton">Vaciar notas</button>
+                    <button type="button" id="saveButton">Guardar notas</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        let currentState = null;
+        let currentNotes = [];
+
+        const messageBox = document.getElementById("message");
+        const unidadSelect = document.getElementById("unidadSelect");
+        const tipoSelect = document.getElementById("tipoSelect");
+        const actividadSelect = document.getElementById("actividadSelect");
+        const notasBody = document.getElementById("notasBody");
+        const fileName = document.getElementById("fileName");
+        const activityName = document.getElementById("activityName");
+        const studentCount = document.getElementById("studentCount");
+        const saveButton = document.getElementById("saveButton");
+        const reloadButton = document.getElementById("reloadButton");
+        const clearButton = document.getElementById("clearButton");
+
+        document.addEventListener("DOMContentLoaded", () => {
+            if (!window.electronExcel) {
+                showMessage("Abre esta pantalla desde la aplicacion local de Electron para modificar el Excel.", "error");
+                setDisabled(true);
+                return;
+            }
+
+            reloadButton.addEventListener("click", () => loadNotas());
+            saveButton.addEventListener("click", saveNotas);
+            clearButton.addEventListener("click", clearNotas);
+            unidadSelect.addEventListener("change", () => loadNotas({ keepActivity: false }));
+            tipoSelect.addEventListener("change", () => loadNotas({ keepActivity: false }));
+            actividadSelect.addEventListener("change", () => loadNotas());
+            loadNotas();
+        });
+
+        async function loadNotas(options = {}) {
+            try {
+                setDisabled(true);
+                showMessage("Leyendo actividades de la hoja seleccionada...", "info");
+
+                const payload = {
+                    unidad: unidadSelect.value || "U1",
+                    tipo: tipoSelect.value || "practicas",
+                    actividad: options.keepActivity === false ? 1 : Number(actividadSelect.value || 1)
+                };
+                const data = await window.electronExcel.getNotasActividad(payload);
+
+                if (!data) {
+                    showMessage("No se encontro el Excel. Seleccionalo desde el gestor de alumnos o coloca la plantilla en esta carpeta.", "error");
+                    setDisabled(false);
+                    return;
+                }
+
+                currentState = data;
+                currentNotes = (data.notas || []).map((item) => ({ ...item }));
+                renderControls(data);
+                renderSummary(data);
+                renderTable();
+                showMessage("Actividad cargada correctamente.", "success");
+            } catch (error) {
+                showMessage(error.message || "No se pudieron cargar las notas.", "error");
+            } finally {
+                setDisabled(false);
+            }
+        }
+
+        function renderControls(data) {
+            fillSelect(
+                unidadSelect,
+                data.unidades || [],
+                (item) => item.codigo,
+                (item) => item.label || item.codigo,
+                data.unidad
+            );
+
+            fillSelect(
+                tipoSelect,
+                data.tipos || [],
+                (item) => item.key,
+                (item) => item.label,
+                data.tipo
+            );
+
+            fillSelect(
+                actividadSelect,
+                data.actividades || [],
+                (item) => item.numero,
+                (item) => `Actividad ${item.numero}`,
+                data.actividad
+            );
+        }
+
+        function fillSelect(select, items, valueGetter, labelGetter, selectedValue) {
+            select.innerHTML = "";
+
+            if (!items.length) {
+                const option = document.createElement("option");
+                option.value = "";
+                option.textContent = "Sin datos";
+                select.appendChild(option);
+                return;
+            }
+
+            items.forEach((item) => {
+                const option = document.createElement("option");
+                option.value = valueGetter(item);
+                option.textContent = labelGetter(item);
+                if (String(option.value) === String(selectedValue)) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+        }
+
+        function renderSummary(data) {
+            fileName.textContent = data.fileName || "-";
+            const type = (data.tipos || []).find((item) => item.key === data.tipo);
+            activityName.textContent = `${data.unidad} - ${type ? type.label : data.tipo} ${data.actividad}`;
+            studentCount.textContent = currentNotes.length;
+        }
+
+        function renderTable() {
+            notasBody.innerHTML = "";
+
+            if (!currentNotes.length) {
+                notasBody.innerHTML = '<tr><td class="empty" colspan="3">No hay alumnos en esta actividad.</td></tr>';
+                return;
+            }
+
+            currentNotes.forEach((item, idx) => {
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                    <td class="numero">${item.numero || idx + 1}</td>
+                    <td>${escapeHtml(item.nombre)}</td>
+                    <td>
+                        <input
+                            class="nota-input"
+                            type="text"
+                            inputmode="decimal"
+                            value="${escapeHtml(item.nota || "")}"
+                            aria-label="Nota de ${escapeHtml(item.nombre)}"
+                        >
+                    </td>
+                `;
+
+                row.querySelector("input").addEventListener("input", (event) => {
+                    currentNotes[idx].nota = event.target.value;
+                });
+
+                notasBody.appendChild(row);
+            });
+        }
+
+        async function saveNotas() {
+            if (!currentState) {
+                return;
+            }
+
+            try {
+                setDisabled(true);
+                showMessage("Guardando notas en el Excel...", "info");
+                const data = await window.electronExcel.saveNotasActividad({
+                    unidad: currentState.unidad,
+                    tipo: currentState.tipo,
+                    actividad: currentState.actividad,
+                    notas: currentNotes
+                });
+                currentState = data;
+                currentNotes = (data.notas || []).map((item) => ({ ...item }));
+                renderControls(data);
+                renderSummary(data);
+                renderTable();
+                showMessage("Notas guardadas. Excel recalculara las formulas al abrirse.", "success");
+            } catch (error) {
+                showMessage(error.message || "No se pudieron guardar las notas.", "error");
+            } finally {
+                setDisabled(false);
+            }
+        }
+
+        function clearNotas() {
+            currentNotes = currentNotes.map((item) => ({ ...item, nota: "" }));
+            renderTable();
+        }
+
+        function setDisabled(disabled) {
+            [unidadSelect, tipoSelect, actividadSelect, saveButton, reloadButton, clearButton].forEach((element) => {
+                element.disabled = disabled;
+            });
+        }
+
+        function showMessage(text, type) {
+            messageBox.textContent = text;
+            messageBox.className = `message ${type} show`;
+        }
+
+        function escapeHtml(value) {
+            return String(value || "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
