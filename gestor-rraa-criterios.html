@@ -699,9 +699,15 @@
         let xlsxReady = false;
         let raaaActuales = [];
         let criteriosActuales = [];
+        const isElectronMode = Boolean(window.electronExcel);
 
         // ===== VERIFICACIÓN DE LIBRERÍA XLSX =====
         function checkXLSX() {
+            if (isElectronMode) {
+                xlsxReady = true;
+                return true;
+            }
+
             if (typeof XLSX === 'undefined') {
                 return false;
             }
@@ -721,6 +727,11 @@
         const fileInput = document.getElementById('fileInput');
 
         uploadArea.addEventListener('click', () => {
+            if (isElectronMode) {
+                seleccionarArchivoLocal();
+                return;
+            }
+
             if (!xlsxReady) {
                 mostrarMensaje('⚠️ Cargando librerías...', 'info');
                 return;
@@ -740,6 +751,10 @@
         uploadArea.addEventListener('drop', (e) => {
             e.preventDefault();
             uploadArea.classList.remove('dragging');
+            if (isElectronMode) {
+                mostrarMensaje('Usa el selector de archivo para conectar el Excel local.', 'info');
+                return;
+            }
             if (!xlsxReady) {
                 mostrarMensaje('⚠️ Cargando librerías...', 'info');
                 return;
@@ -749,6 +764,35 @@
                 cargarArchivo(files[0]);
             }
         });
+
+        async function seleccionarArchivoLocal() {
+            try {
+                mostrarLoading(true);
+                const result = await window.electronExcel.getRraaCriterios();
+
+                if (!result) {
+                    mostrarMensaje('No se encontrÃ³ un Excel en el directorio de la app.', 'error');
+                    mostrarLoading(false);
+                    return;
+                }
+
+                archivoOriginal = { name: result.fileName, path: result.filePath };
+                workbook = null;
+                raaaActuales = result.rraa;
+                criteriosActuales = result.criterios;
+                mostrarTablaRRAA();
+                mostrarTablaCriterios();
+                actualizarStatsRRAA();
+                actualizarStatsCriterios();
+                document.getElementById('uploadArea').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+                mostrarMensaje(`Archivo conectado: ${result.fileName}`, 'success');
+                mostrarLoading(false);
+            } catch (error) {
+                mostrarMensaje('Error al abrir RRAA/CE: ' + error.message, 'error');
+                mostrarLoading(false);
+            }
+        }
 
         fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0 && xlsxReady) {
@@ -1007,6 +1051,11 @@
 
         // ===== DESCARGAR EXCEL =====
         function descargarExcel() {
+            if (isElectronMode) {
+                guardarExcelLocal();
+                return;
+            }
+
             if (!workbook) {
                 mostrarMensaje('❌ No hay archivo cargado', 'error');
                 return;
@@ -1078,7 +1127,30 @@
 
         // ===== CARGAR NUEVO ARCHIVO =====
         function cargarNuevo() {
+            if (isElectronMode) {
+                seleccionarArchivoLocal();
+                return;
+            }
+
             location.reload();
+        }
+
+        async function guardarExcelLocal() {
+            try {
+                mostrarLoading(true);
+                const result = await window.electronExcel.saveRraaCriterios(raaaActuales, criteriosActuales);
+                raaaActuales = result.rraa;
+                criteriosActuales = result.criterios;
+                mostrarTablaRRAA();
+                mostrarTablaCriterios();
+                actualizarStatsRRAA();
+                actualizarStatsCriterios();
+                mostrarMensaje(`RRAA y CE guardados en ${result.fileName}`, 'success');
+                mostrarLoading(false);
+            } catch (error) {
+                mostrarMensaje('Error al guardar RRAA/CE: ' + error.message, 'error');
+                mostrarLoading(false);
+            }
         }
 
         // ===== FUNCIONES AUXILIARES =====

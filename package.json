@@ -15,6 +15,7 @@
       "index.html",
       "gestor-alumnos.html",
       "gestor-rraa-criterios.html",
+      "gestor-unidades.html",
       "main.js",
       "preload.js",
       "package.json"
@@ -33,6 +34,7 @@
     }
   },
   "dependencies": {
+    "jszip": "^3.10.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

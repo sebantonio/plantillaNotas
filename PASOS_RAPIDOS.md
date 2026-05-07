@@ -115,6 +115,21 @@ gestor-notas-fp/
 
 ## ⚠️ PROBLEMAS COMUNES
 
+### Regla importante al modificar el Excel desde Electron
+
+No reescribir nunca el libro completo con `XLSX.writeFile()` o ExcelJS cuando se trabaje con la plantilla real.
+
+Procedimiento correcto:
+
+1. Leer con `xlsx` solo para localizar filas, columnas y validar estructura.
+2. Abrir el `.xlsx` como ZIP con `JSZip`.
+3. Modificar solo el XML de la hoja necesaria, por ejemplo:
+   - `DATOS` para alumnos, RRAA y unidades.
+   - `PESOS` para criterios de evaluación.
+4. Reempaquetar el ZIP dejando intactos los XML de las demás hojas.
+
+Motivo: la plantilla tiene muchas fórmulas y hojas grandes. Si una librería reescribe todo el libro, puede inflar el archivo hasta decenas de MB y corromper fórmulas en las hojas de evaluación.
+
 ### "fatal: repository not found"
 ```
 ❌ Verificar que la URL sea correcta
