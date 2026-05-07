@@ -468,12 +468,11 @@ async function saveRraaCriteriosToFile(filePath, rraa, criterios, ponderacionesU
     throw new Error('No se encontro la seccion RRAA en la hoja DATOS.');
   }
 
-  const existingRraaCount = countExistingRraa(datosRows, rraaStart);
-  const rraaRowsToClear = Math.max(existingRraaCount, rraa.length);
   const normalizedRraa = rraa.map((item, idx) => ({
     numero: Number(item.numero) || idx + 1,
     descripcion: String(item.descripcion || '').trim()
   }));
+
   const normalizedCriterios = criterios.map((item) => ({
     codigo: String(item.codigo || item.nombre || '').trim(),
     raNumero: Number(item.raNumero) || criterionRaNumber(item.codigo || item.nombre),
@@ -483,41 +482,28 @@ async function saveRraaCriteriosToFile(filePath, rraa, criterios, ponderacionesU
     ponderacionEmpresa: Number(item.ponderacionEmpresa) || 0,
     colIdx: Number.isInteger(item.colIdx) ? item.colIdx : null
   }));
+
   const normalizedUnitWeights = normalizeUnitWeights(ponderacionesUnidad);
 
   await editWorkbookSheetsXml(filePath, {
     DATOS: (sheetXml) => {
       let xml = sheetXml;
 
-      // Actualizar RRAA
-      for (let idx = 0; idx < rraaRowsToClear; idx += 1) {
-        const rowIdx = rraaStart + idx;
-        xml = setXmlCell(xml, rowIdx, 5, null);
-        xml = setXmlCell(xml, rowIdx, 6, null);
-      }
-
+      // Actualizar solo RRAA (no tocar criterios en DATOS)
       normalizedRraa.forEach((item, idx) => {
         const rowIdx = rraaStart + idx;
         xml = setXmlCell(xml, rowIdx, 5, item.numero, 'number');
         xml = setXmlCell(xml, rowIdx, 6, item.descripcion, 'text');
       });
 
-      // Actualizar Criterios (código y texto)
-      const criteriosStartRow = findCriteriosStartRow(datosRows);
-      if (criteriosStartRow !== -1) {
-        normalizedCriterios.forEach((criterio, idx) => {
-          const rowIdx = criteriosStartRow + idx;
+      // Actualizar texto de criterios SOLO si encontramos su fila específica
+      normalizedCriterios.forEach((criterio) => {
+        const rowIdx = findCriterionTextRow(datosRows, criterio.codigo);
+        if (rowIdx !== -1) {
           xml = setXmlCell(xml, rowIdx, 21, criterio.codigo, 'text');
           xml = setXmlCell(xml, rowIdx, 22, criterio.texto || null, 'text');
-        });
-
-        // Limpiar criterios antiguos
-        for (let idx = normalizedCriterios.length; idx < 50; idx += 1) {
-          const rowIdx = criteriosStartRow + idx;
-          xml = setXmlCell(xml, rowIdx, 21, null);
-          xml = setXmlCell(xml, rowIdx, 22, null);
         }
-      }
+      });
 
       return xml;
     },
@@ -539,9 +525,11 @@ async function saveRraaCriteriosToFile(filePath, rraa, criterios, ponderacionesU
       normalizedUnitWeights.forEach((unidad) => {
         Object.entries(unidad.ponderaciones).forEach(([colKey, values]) => {
           const colIdx = Number(colKey);
-          xml = setXmlCell(xml, unidad.rowIdx, colIdx, values.ponderacion, 'number');
-          xml = setXmlCell(xml, unidad.rowIdx, colIdx + 1, values.ponderacionInstituto, 'number');
-          xml = setXmlCell(xml, unidad.rowIdx, colIdx + 2, values.ponderacionEmpresa, 'number');
+          if (colIdx >= 0) {
+            xml = setXmlCell(xml, unidad.rowIdx, colIdx, values.ponderacion, 'number');
+            xml = setXmlCell(xml, unidad.rowIdx, colIdx + 1, values.ponderacionInstituto, 'number');
+            xml = setXmlCell(xml, unidad.rowIdx, colIdx + 2, values.ponderacionEmpresa, 'number');
+          }
         });
       });
 
