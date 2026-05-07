@@ -633,6 +633,9 @@ async function editWorkbookSheetsXml(filePath, sheetEdits) {
     zip.file(sheetPath, updatedXml);
   }
 
+  await removeCalcChain(zip);
+  await forceWorkbookRecalculation(zip);
+
   const output = await zip.generateAsync({
     type: 'nodebuffer',
     compression: 'DEFLATE',
@@ -680,6 +683,82 @@ async function readZipText(zip, fileName) {
   }
 
   return file.async('string');
+}
+
+async function removeCalcChain(zip) {
+  zip.remove('xl/calcChain.xml');
+
+  const relsPath = 'xl/_rels/workbook.xml.rels';
+  const relsFile = zip.file(relsPath);
+  if (relsFile) {
+    const relsXml = await relsFile.async('string');
+    const cleanedRelsXml = relsXml.replace(
+      /<Relationship\b[^>]*Type="[^"]*\/calcChain"[^>]*(?:\/>|><\/Relationship>)/g,
+      ''
+    );
+    zip.file(relsPath, cleanedRelsXml);
+  }
+
+  const contentTypesPath = '[Content_Types].xml';
+  const contentTypesFile = zip.file(contentTypesPath);
+  if (contentTypesFile) {
+    const contentTypesXml = await contentTypesFile.async('string');
+    const cleanedContentTypesXml = contentTypesXml.replace(
+      /<Override\b[^>]*PartName="\/xl\/calcChain\.xml"[^>]*(?:\/>|><\/Override>)/g,
+      ''
+    );
+    zip.file(contentTypesPath, cleanedContentTypesXml);
+  }
+}
+
+async function forceWorkbookRecalculation(zip) {
+  const workbookPath = 'xl/workbook.xml';
+  const workbookFile = zip.file(workbookPath);
+
+  if (!workbookFile) {
+    return;
+  }
+
+  let workbookXml = await workbookFile.async('string');
+
+  if (/<calcPr\b[^>]*\/>/.test(workbookXml)) {
+    workbookXml = workbookXml.replace(/<calcPr\b[^>]*\/>/, (tag) => {
+      let next = tag;
+      next = setXmlAttribute(next, 'calcMode', 'auto');
+      next = setXmlAttribute(next, 'fullCalcOnLoad', '1');
+      next = setXmlAttribute(next, 'forceFullCalc', '1');
+      return next;
+    });
+  } else if (/<calcPr\b[^>]*>[\s\S]*?<\/calcPr>/.test(workbookXml)) {
+    workbookXml = workbookXml.replace(/<calcPr\b[^>]*>/, (tag) => {
+      let next = tag;
+      next = setXmlAttribute(next, 'calcMode', 'auto');
+      next = setXmlAttribute(next, 'fullCalcOnLoad', '1');
+      next = setXmlAttribute(next, 'forceFullCalc', '1');
+      return next;
+    });
+  } else {
+    workbookXml = workbookXml.replace(
+      '</workbook>',
+      '<calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/></workbook>'
+    );
+  }
+
+  zip.file(workbookPath, workbookXml);
+}
+
+function setXmlAttribute(tag, name, value) {
+  const regex = new RegExp(`\\b${name}="[^"]*"`);
+
+  if (regex.test(tag)) {
+    return tag.replace(regex, `${name}="${escapeXml(value)}"`);
+  }
+
+  if (tag.endsWith('/>')) {
+    return tag.replace('/>', ` ${name}="${escapeXml(value)}"/>`);
+  }
+
+  return tag.replace('>', ` ${name}="${escapeXml(value)}">`);
 }
 
 function getXmlAttribute(tag, name) {
