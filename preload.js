@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electronExcel', {
   getUnidades: () => ipcRenderer.invoke('excel:getUnidades'),
   saveUnidades: (unidades) => ipcRenderer.invoke('excel:saveUnidades', unidades),
   getRraaCriterios: () => ipcRenderer.invoke('excel:getRraaCriterios'),
-  saveRraaCriterios: (rraa, criterios) => ipcRenderer.invoke('excel:saveRraaCriterios', { rraa, criterios }),
+  saveRraaCriterios: (rraa, criterios, ponderacionesUnidad = []) =>
+    ipcRenderer.invoke('excel:saveRraaCriterios', { rraa, criterios, ponderacionesUnidad }),
   openExternal: (url) => ipcRenderer.invoke('app:openExternal', url)
 });

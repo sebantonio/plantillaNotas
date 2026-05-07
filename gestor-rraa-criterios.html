@@ -616,6 +616,7 @@
                 <div class="tabs">
                     <button class="tab-btn active" onclick="cambiarTab('rraa')">🎯 RRAA</button>
                     <button class="tab-btn" onclick="cambiarTab('criterios')">✓ Criterios</button>
+                    <button class="tab-btn" onclick="cambiarTab('ponderaciones')">⚖ Ponderación por unidad</button>
                 </div>
 
                 <!-- TAB: RRAA -->
@@ -712,6 +713,32 @@
                     </div>
                 </div>
 
+                <div id="tab-ponderaciones" class="tab-content">
+                    <div class="section">
+                        <h2>3️⃣ Ponderación de CCEE por Unidad</h2>
+                        <div class="form-group" style="align-items: center; margin-bottom: 15px;">
+                            <select id="unidadPonderacionSelect" onchange="seleccionarUnidadPonderacion(this.value)" style="flex: 1;"></select>
+                            <select id="ponderacionRaFiltro" onchange="seleccionarRAPonderacion(this.value)" style="flex: 1;"></select>
+                        </div>
+
+                        <div class="table-container">
+                            <table id="ponderacionesTable">
+                                <thead>
+                                    <tr>
+                                        <th class="col-ra">RA</th>
+                                        <th class="col-codigo">Código</th>
+                                        <th>Criterio de Evaluación</th>
+                                        <th class="col-ponderacion">Final</th>
+                                        <th class="col-ponderacion">Instituto</th>
+                                        <th class="col-ponderacion">Empresa</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ponderacionesTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- SECCIÓN 3: ACCIONES FINALES -->
                 <div class="section" style="margin-top: 40px; padding-top: 30px; border-top: 2px solid #e0e0e0;">
                     <div class="actions">
@@ -740,7 +767,10 @@
         let xlsxReady = false;
         let raaaActuales = [];
         let criteriosActuales = [];
+        let ponderacionesUnidad = [];
         let criterioRaActivo = null;
+        let ponderacionUnidadActiva = null;
+        let ponderacionRaActiva = null;
         const isElectronMode = Boolean(window.electronExcel);
 
         // ===== VERIFICACIÓN DE LIBRERÍA XLSX =====
@@ -822,12 +852,17 @@
                 workbook = null;
                 raaaActuales = result.rraa;
                 criteriosActuales = result.criterios;
+                ponderacionesUnidad = result.ponderacionesUnidad || [];
                 criterioRaActivo = criterioRaActivo || primerRAConCriterios();
+                ponderacionUnidadActiva = ponderacionUnidadActiva || primeraUnidadPonderacion();
+                ponderacionRaActiva = ponderacionRaActiva || primerRAConCriterios();
                 mostrarTablaRRAA();
                 mostrarTablaCriterios();
+                mostrarTablaPonderacionesUnidad();
                 actualizarStatsRRAA();
                 actualizarStatsCriterios();
                 actualizarOpcionesRA();
+                actualizarOpcionesPonderacion();
                 document.getElementById('uploadArea').style.display = 'none';
                 document.getElementById('mainContent').style.display = 'block';
                 mostrarMensaje(`Archivo conectado: ${result.fileName}`, 'success');
@@ -870,6 +905,7 @@
 
                     cargarRRAA();
                     cargarCriterios();
+                    cargarPonderacionesUnidad();
                     mostrarMensaje('✅ Archivo cargado exitosamente', 'success');
                     document.getElementById('uploadArea').style.display = 'none';
                     document.getElementById('mainContent').style.display = 'block';
@@ -967,6 +1003,36 @@
             actualizarOpcionesRA();
         }
 
+        function cargarPonderacionesUnidad() {
+            const sheet = workbook.Sheets['PESOS'];
+            const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+            ponderacionesUnidad = [];
+            for (let rowIdx = 5; rowIdx < 21; rowIdx++) {
+                const row = json[rowIdx] || [];
+                const ponderaciones = {};
+                criteriosActuales.forEach((criterio) => {
+                    ponderaciones[criterio.colIdx] = {
+                        ponderacion: row[criterio.colIdx] || 0,
+                        ponderacionInstituto: row[criterio.colIdx + 1] || 0,
+                        ponderacionEmpresa: row[criterio.colIdx + 2] || 0
+                    };
+                });
+
+                ponderacionesUnidad.push({
+                    numero: rowIdx - 4,
+                    rowIdx,
+                    nombre: row[0] && String(row[0]) !== '0' ? String(row[0]) : '',
+                    ponderaciones
+                });
+            }
+
+            ponderacionUnidadActiva = ponderacionUnidadActiva || primeraUnidadPonderacion();
+            ponderacionRaActiva = ponderacionRaActiva || primerRAConCriterios();
+            actualizarOpcionesPonderacion();
+            mostrarTablaPonderacionesUnidad();
+        }
+
         // ===== MOSTRAR TABLA RRAA =====
         function mostrarTablaRRAA() {
             const tbody = document.getElementById('rraaTableBody');
@@ -1020,12 +1086,46 @@
                     <td><input class="codigo-input" type="text" value="${escaparHtml(crit.codigo || crit.nombre)}" maxlength="6" onchange="criteriosActuales[${idx}].codigo = this.value; criteriosActuales[${idx}].nombre = this.value" title="${escaparHtml(crit.raDescripcion || '')}" /></td>
                     <td><textarea onchange="criteriosActuales[${idx}].texto = this.value">${escaparHtml(crit.texto || '')}</textarea></td>
                     <td><input type="number" value="${crit.ponderacion || 0}" min="0" max="1" step="0.01" readonly /></td>
-                    <td><input type="number" value="${crit.ponderacionInstituto || 0}" min="0" max="1" step="0.01" onchange="actualizarPonderacionCriterio(${idx}, 'ponderacionInstituto', this.value)" /></td>
-                    <td><input type="number" value="${crit.ponderacionEmpresa || 0}" min="0" max="1" step="0.01" onchange="actualizarPonderacionCriterio(${idx}, 'ponderacionEmpresa', this.value)" /></td>
+                    <td><input type="number" value="${crit.ponderacionInstituto || 0}" min="0" max="1" step="0.01" readonly /></td>
+                    <td><input type="number" value="${crit.ponderacionEmpresa || 0}" min="0" max="1" step="0.01" readonly /></td>
                     <td>
                         <button class="delete" onclick="eliminarCriterio(${idx})">🗑️</button>
                     </td>
                 </tr>
+                `;
+            }).join('');
+        }
+
+        function mostrarTablaPonderacionesUnidad() {
+            const tbody = document.getElementById('ponderacionesTableBody');
+            if (!tbody) {
+                return;
+            }
+
+            const unidad = ponderacionesUnidad.find((item) => Number(item.rowIdx) === Number(ponderacionUnidadActiva));
+            if (!unidad) {
+                tbody.innerHTML = '';
+                return;
+            }
+
+            const criteriosVisibles = criteriosActuales.filter((crit) => Number(crit.raNumero) === Number(ponderacionRaActiva));
+            tbody.innerHTML = criteriosVisibles.map((crit) => {
+                const values = unidad.ponderaciones[crit.colIdx] || {
+                    ponderacion: 0,
+                    ponderacionInstituto: 0,
+                    ponderacionEmpresa: 0
+                };
+                const final = sumarPonderaciones(values.ponderacionInstituto, values.ponderacionEmpresa);
+
+                return `
+                    <tr>
+                        <td>RA ${crit.raNumero}</td>
+                        <td><input class="codigo-input" type="text" value="${escaparHtml(crit.codigo || crit.nombre)}" readonly /></td>
+                        <td><textarea readonly>${escaparHtml(crit.texto || '')}</textarea></td>
+                        <td><input type="number" value="${final}" readonly /></td>
+                        <td><input type="number" value="${values.ponderacionInstituto || 0}" min="0" max="1" step="0.01" onchange="actualizarPonderacionUnidad(${unidad.rowIdx}, ${crit.colIdx}, 'ponderacionInstituto', this.value)" /></td>
+                        <td><input type="number" value="${values.ponderacionEmpresa || 0}" min="0" max="1" step="0.01" onchange="actualizarPonderacionUnidad(${unidad.rowIdx}, ${crit.colIdx}, 'ponderacionEmpresa', this.value)" /></td>
+                    </tr>
                 `;
             }).join('');
         }
@@ -1093,6 +1193,65 @@
             const instituto = document.getElementById('nuevoPonderacionInstituto').value;
             const empresa = document.getElementById('nuevoPonderacionEmpresa').value;
             document.getElementById('nuevoPonderacion').value = sumarPonderaciones(instituto, empresa);
+        }
+
+        function actualizarOpcionesPonderacion() {
+            const unidadSelect = document.getElementById('unidadPonderacionSelect');
+            const raSelect = document.getElementById('ponderacionRaFiltro');
+            if (!unidadSelect || !raSelect) {
+                return;
+            }
+
+            const unidades = ponderacionesUnidad.filter((unidad) => unidad.nombre);
+            if (!ponderacionUnidadActiva && unidades.length > 0) {
+                ponderacionUnidadActiva = unidades[0].rowIdx;
+            }
+            if (!ponderacionRaActiva) {
+                ponderacionRaActiva = primerRAConCriterios();
+            }
+
+            unidadSelect.innerHTML = unidades.map((unidad) => `
+                <option value="${unidad.rowIdx}" ${Number(unidad.rowIdx) === Number(ponderacionUnidadActiva) ? 'selected' : ''}>U${unidad.numero} - ${escaparHtml(unidad.nombre)}</option>
+            `).join('');
+            raSelect.innerHTML = listaRANumeros().map((raNumero) => {
+                const rraa = raaaActuales.find(item => Number(item.numero) === Number(raNumero));
+                const nombre = rraa && rraa.descripcion ? ` - ${rraa.descripcion}` : '';
+                return `<option value="${raNumero}" ${Number(raNumero) === Number(ponderacionRaActiva) ? 'selected' : ''}>RA ${raNumero}${escaparHtml(nombre)}</option>`;
+            }).join('');
+        }
+
+        function seleccionarUnidadPonderacion(value) {
+            ponderacionUnidadActiva = Number(value);
+            mostrarTablaPonderacionesUnidad();
+        }
+
+        function seleccionarRAPonderacion(value) {
+            ponderacionRaActiva = Number(value);
+            mostrarTablaPonderacionesUnidad();
+        }
+
+        function primeraUnidadPonderacion() {
+            const unidad = ponderacionesUnidad.find((item) => item.nombre);
+            return unidad ? unidad.rowIdx : null;
+        }
+
+        function actualizarPonderacionUnidad(rowIdx, colIdx, campo, value) {
+            const unidad = ponderacionesUnidad.find((item) => Number(item.rowIdx) === Number(rowIdx));
+            if (!unidad) {
+                return;
+            }
+
+            unidad.ponderaciones[colIdx] = unidad.ponderaciones[colIdx] || {
+                ponderacion: 0,
+                ponderacionInstituto: 0,
+                ponderacionEmpresa: 0
+            };
+            unidad.ponderaciones[colIdx][campo] = parseFloat(value) || 0;
+            unidad.ponderaciones[colIdx].ponderacion = sumarPonderaciones(
+                unidad.ponderaciones[colIdx].ponderacionInstituto,
+                unidad.ponderaciones[colIdx].ponderacionEmpresa
+            );
+            mostrarTablaPonderacionesUnidad();
         }
 
         function actualizarFiltroRA() {
@@ -1358,13 +1517,16 @@
         async function guardarExcelLocal() {
             try {
                 mostrarLoading(true);
-                const result = await window.electronExcel.saveRraaCriterios(raaaActuales, criteriosActuales);
+                const result = await window.electronExcel.saveRraaCriterios(raaaActuales, criteriosActuales, ponderacionesUnidad);
                 raaaActuales = result.rraa;
                 criteriosActuales = result.criterios;
+                ponderacionesUnidad = result.ponderacionesUnidad || [];
                 mostrarTablaRRAA();
                 mostrarTablaCriterios();
+                mostrarTablaPonderacionesUnidad();
                 actualizarStatsRRAA();
                 actualizarStatsCriterios();
+                actualizarOpcionesPonderacion();
                 mostrarMensaje(`RRAA y CE guardados en ${result.fileName}`, 'success');
                 mostrarLoading(false);
             } catch (error) {

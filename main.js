@@ -139,7 +139,12 @@ ipcMain.handle('excel:saveRraaCriterios', async (_event, payload) => {
     throw new Error('Los RRAA y criterios no tienen un formato valido.');
   }
 
-  await saveRraaCriteriosToFile(selectedExcelPath, payload.rraa, payload.criterios);
+  await saveRraaCriteriosToFile(
+    selectedExcelPath,
+    payload.rraa,
+    payload.criterios,
+    Array.isArray(payload.ponderacionesUnidad) ? payload.ponderacionesUnidad : []
+  );
   return loadRraaCriteriosFromSelectedFile();
 });
 
@@ -292,11 +297,35 @@ function loadRraaCriteriosFromSelectedFile() {
     });
   }
 
+  const ponderacionesUnidad = [];
+
+  for (let rowIdx = 5; rowIdx < 21; rowIdx += 1) {
+    const row = pesosRows[rowIdx] || [];
+    const nombre = row[0] && String(row[0]) !== '0' ? String(row[0]) : '';
+    const ponderaciones = {};
+
+    criterios.forEach((criterio) => {
+      ponderaciones[criterio.colIdx] = {
+        ponderacion: row[criterio.colIdx] || 0,
+        ponderacionInstituto: row[criterio.colIdx + 1] || 0,
+        ponderacionEmpresa: row[criterio.colIdx + 2] || 0
+      };
+    });
+
+    ponderacionesUnidad.push({
+      numero: rowIdx - 4,
+      rowIdx,
+      nombre,
+      ponderaciones
+    });
+  }
+
   return {
     filePath: selectedExcelPath,
     fileName: path.basename(selectedExcelPath),
     rraa,
-    criterios
+    criterios,
+    ponderacionesUnidad
   };
 }
 
@@ -379,7 +408,7 @@ async function saveUnidadesToFile(filePath, unidades) {
   });
 }
 
-async function saveRraaCriteriosToFile(filePath, rraa, criterios) {
+async function saveRraaCriteriosToFile(filePath, rraa, criterios, ponderacionesUnidad) {
   const workbook = XLSX.readFile(filePath, { cellDates: true });
 
   if (!workbook.SheetNames.includes('DATOS') || !workbook.SheetNames.includes('PESOS')) {
@@ -408,6 +437,7 @@ async function saveRraaCriteriosToFile(filePath, rraa, criterios) {
     ponderacionEmpresa: Number(item.ponderacionEmpresa) || 0,
     colIdx: Number.isInteger(item.colIdx) ? item.colIdx : null
   }));
+  const normalizedUnitWeights = normalizeUnitWeights(ponderacionesUnidad);
 
   await editWorkbookSheetsXml(filePath, {
     DATOS: (sheetXml) => {
@@ -446,10 +476,15 @@ async function saveRraaCriteriosToFile(filePath, rraa, criterios) {
         }
 
         xml = setXmlCell(xml, 3, colIdx, criterio.codigo, 'text');
-        xml = setXmlCell(xml, 21, colIdx, criterio.ponderacion, 'number');
-        xml = setXmlCell(xml, 21, colIdx + 1, criterio.ponderacionInstituto, 'number');
-        xml = setXmlCell(xml, 21, colIdx + 2, criterio.ponderacionEmpresa, 'number');
-        xml = setXmlCell(xml, 23, colIdx, criterio.ponderacionEmpresa > 0 ? 'x' : null, 'text');
+      });
+
+      normalizedUnitWeights.forEach((unidad) => {
+        Object.entries(unidad.ponderaciones).forEach(([colKey, values]) => {
+          const colIdx = Number(colKey);
+          xml = setXmlCell(xml, unidad.rowIdx, colIdx, values.ponderacion, 'number');
+          xml = setXmlCell(xml, unidad.rowIdx, colIdx + 1, values.ponderacionInstituto, 'number');
+          xml = setXmlCell(xml, unidad.rowIdx, colIdx + 2, values.ponderacionEmpresa, 'number');
+        });
       });
 
       return xml;
@@ -484,6 +519,35 @@ function findRraaStartRow(rows) {
   });
 
   return headerRowIdx === -1 ? -1 : headerRowIdx + 1;
+}
+
+function normalizeUnitWeights(ponderacionesUnidad) {
+  return ponderacionesUnidad
+    .filter((unidad) => Number.isInteger(unidad.rowIdx) || !Number.isNaN(Number(unidad.rowIdx)))
+    .map((unidad) => {
+      const ponderaciones = {};
+
+      Object.entries(unidad.ponderaciones || {}).forEach(([colKey, values]) => {
+        const colIdx = Number(colKey);
+
+        if (Number.isNaN(colIdx)) {
+          return;
+        }
+
+        const instituto = Number(values.ponderacionInstituto) || 0;
+        const empresa = Number(values.ponderacionEmpresa) || 0;
+        ponderaciones[colIdx] = {
+          ponderacionInstituto: instituto,
+          ponderacionEmpresa: empresa,
+          ponderacion: Number((instituto + empresa).toFixed(6))
+        };
+      });
+
+      return {
+        rowIdx: Number(unidad.rowIdx),
+        ponderaciones
+      };
+    });
 }
 
 function isCriterionCode(value) {
