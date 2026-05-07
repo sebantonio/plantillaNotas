@@ -504,11 +504,14 @@ function loadNotasEvaluacionFromSelectedFile(evaluacion = '1') {
 
   const sheet = workbook.Sheets[sheetName];
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
-  const title = getCellDisplay(sheet, 2, 0) || sheetName;
-  const raColumns = findEvaluationRaColumns(sheet, rows);
-  const finalColumn = findEvaluationFinalColumn(sheet, rows);
-  const criteria = findEvaluationCriteriaColumns(sheet, rows, raColumns, finalColumn);
-  const alumnos = extractEvaluationStudents(sheet, rows, raColumns, finalColumn, criteria);
+  const title = normalizePlainText(sheetName) === 'FINAL'
+    ? 'FINAL'
+    : getCellDisplay(sheet, 2, 0) || sheetName;
+  const layout = findEvaluationLayout(rows);
+  const raColumns = findEvaluationRaColumns(sheet, rows, layout);
+  const finalColumn = findEvaluationFinalColumn(sheet, rows, layout);
+  const criteria = findEvaluationCriteriaColumns(sheet, rows, layout, raColumns, finalColumn);
+  const alumnos = extractEvaluationStudents(sheet, rows, layout, raColumns, finalColumn, criteria);
 
   return {
     filePath: selectedExcelPath,
@@ -516,14 +519,52 @@ function loadNotasEvaluacionFromSelectedFile(evaluacion = '1') {
     sheetName,
     title,
     evaluacion: String(evaluacion),
+    layout,
     raColumns,
     criteria,
     alumnos
   };
 }
 
+function findEvaluationLayout(rows) {
+  for (let rowIdx = 0; rowIdx < rows.length; rowIdx += 1) {
+    const row = rows[rowIdx] || [];
+    const normalizedCells = row.map((value) => normalizePlainText(value));
+    const notaCeCount = normalizedCells.filter((value) => value === 'NOTA CE').length;
+    const nextRow = rows[rowIdx + 1] || [];
+    const nextRowCriteriaCount = nextRow.filter((value) => isEvaluationCriterionCode(value)).length;
+
+    if (notaCeCount > 0 && nextRowCriteriaCount > 0) {
+      return {
+        summaryRowIdx: rowIdx,
+        codeRowIdx: rowIdx + 1,
+        firstStudentRowIdx: rowIdx + 2
+      };
+    }
+  }
+
+  throw new Error('No se encontro la cabecera de notas de evaluacion.');
+}
+
 function findEvaluationSheetName(workbook, evaluacion) {
   const target = String(evaluacion || '1').trim();
+
+  if (target === 'final') {
+    return workbook.SheetNames.find((name) => normalizePlainText(name) === 'FINAL');
+  }
+
+  if (target === '2solo' || target === '3solo') {
+    const evaluationNumber = target.charAt(0);
+    return workbook.SheetNames.find((name) => {
+      const normalized = normalizePlainText(name);
+      return (
+        normalized.includes(evaluationNumber) &&
+        normalized.includes('EVA') &&
+        normalized.includes('SOLO')
+      );
+    });
+  }
+
   return workbook.SheetNames.find((name) => {
     const normalized = normalizePlainText(name);
     return (
@@ -535,13 +576,13 @@ function findEvaluationSheetName(workbook, evaluacion) {
   });
 }
 
-function findEvaluationRaColumns(sheet, rows) {
-  const summaryRow = rows[16] || [];
+function findEvaluationRaColumns(sheet, rows, layout) {
+  const summaryRow = rows[layout.summaryRowIdx] || [];
   const columns = [];
 
   summaryRow.forEach((value, colIdx) => {
     if (normalizePlainText(value) === 'NOTA CE') {
-      const raNumber = findEvaluationRaNumberForBlock(rows, colIdx);
+      const raNumber = findEvaluationRaNumberForBlock(rows, layout, colIdx);
       const label = raNumber ? `RRAA ${raNumber}` : `RRAA ${columns.length + 1}`;
       columns.push({
         colIdx,
@@ -556,8 +597,8 @@ function findEvaluationRaColumns(sheet, rows) {
   return columns;
 }
 
-function findEvaluationRaNumberForBlock(rows, notaCeColIdx) {
-  const codeRow = rows[17] || [];
+function findEvaluationRaNumberForBlock(rows, layout, notaCeColIdx) {
+  const codeRow = rows[layout.codeRowIdx] || [];
 
   for (let colIdx = notaCeColIdx + 1; colIdx < codeRow.length; colIdx += 1) {
     const value = codeRow[colIdx];
@@ -576,9 +617,24 @@ function findEvaluationRaNumberForBlock(rows, notaCeColIdx) {
   return null;
 }
 
-function findEvaluationFinalColumn(sheet, rows) {
-  const summaryRow = rows[16] || [];
-  const colIdx = summaryRow.findIndex((value) => normalizePlainText(value) === 'NOTA FINAL');
+function findEvaluationFinalColumn(sheet, rows, layout) {
+  const summaryRow = rows[layout.summaryRowIdx] || [];
+  let colIdx = summaryRow.findIndex((value) => normalizePlainText(value) === 'NOTA FINAL');
+
+  if (colIdx === -1) {
+    const titleRow = rows[2] || [];
+    colIdx = titleRow.findIndex((value) => normalizePlainText(value) === 'RESUMEN');
+  }
+
+  if (colIdx === -1) {
+    const codeRow = rows[layout.codeRowIdx] || [];
+    for (let idx = codeRow.length - 1; idx >= 0; idx -= 1) {
+      if (isEvaluationCriterionCode(codeRow[idx]) || normalizePlainText(codeRow[idx]) === 'REC') {
+        colIdx = idx + 1;
+        break;
+      }
+    }
+  }
 
   if (colIdx === -1) {
     throw new Error('No se encontro la columna NOTA FINAL en la evaluacion.');
@@ -591,8 +647,8 @@ function findEvaluationFinalColumn(sheet, rows) {
   };
 }
 
-function findEvaluationCriteriaColumns(sheet, rows, raColumns, finalColumn) {
-  const codeRow = rows[17] || [];
+function findEvaluationCriteriaColumns(sheet, rows, layout, raColumns, finalColumn) {
+  const codeRow = rows[layout.codeRowIdx] || [];
   const criteria = [];
 
   raColumns.forEach((ra, idx) => {
@@ -621,10 +677,10 @@ function findEvaluationCriteriaColumns(sheet, rows, raColumns, finalColumn) {
   return criteria;
 }
 
-function extractEvaluationStudents(sheet, rows, raColumns, finalColumn, criteria) {
+function extractEvaluationStudents(sheet, rows, layout, raColumns, finalColumn, criteria) {
   const alumnos = [];
 
-  for (let rowIdx = 18; rowIdx < rows.length; rowIdx += 1) {
+  for (let rowIdx = layout.firstStudentRowIdx; rowIdx < rows.length; rowIdx += 1) {
     const nombre = getCellDisplay(sheet, rowIdx, 0);
 
     if (!nombre || String(nombre).trim() === '') {
