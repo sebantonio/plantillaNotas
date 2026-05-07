@@ -1648,7 +1648,7 @@
 
         async function guardarCambiosAutomaticamente() {
             if (!hayChangesSinGuardar || !isElectronMode) {
-                return;
+                return true;
             }
 
             try {
@@ -1671,11 +1671,29 @@
                 hayChangesSinGuardar = false;
                 mostrarEstadoGuardado('saved', '✅ Guardado');
                 console.log('✅ Cambios guardados automáticamente');
+                return true;
             } catch (error) {
                 mostrarEstadoGuardado('error', `❌ ${error.message || 'Error al guardar'}`);
                 console.error('Error en guardado automático:', error);
+                return false;
             }
         }
+
+        async function guardarCambiosAntesDeCerrar() {
+            if (!isElectronMode || !hayChangesSinGuardar) {
+                return true;
+            }
+
+            if (autoSaveTimeout) {
+                clearTimeout(autoSaveTimeout);
+                autoSaveTimeout = null;
+            }
+
+            mostrarEstadoGuardado('saving', 'Guardando antes de cerrar...');
+            return guardarCambiosAutomaticamente();
+        }
+
+        window.guardarCambiosAntesDeCerrar = guardarCambiosAntesDeCerrar;
 
         function guardarCambiosForzado() {
             if (!isElectronMode) {

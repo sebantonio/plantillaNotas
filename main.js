@@ -6,6 +6,7 @@ const JSZip = require('jszip');
 
 let mainWindow;
 let selectedExcelPath = null;
+let allowWindowClose = false;
 const defaultExcelName = 'plantilla313_dual - copia.xlsx';
 const ACTIVITY_TYPES = [
   { key: 'practicas', label: 'Practicas', baseCol: 0 },
@@ -32,6 +33,31 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  mainWindow.on('close', async (event) => {
+    if (allowWindowClose || mainWindow.webContents.isDestroyed()) {
+      return;
+    }
+
+    event.preventDefault();
+
+    try {
+      const canClose = await mainWindow.webContents.executeJavaScript(`
+        window.guardarCambiosAntesDeCerrar
+          ? window.guardarCambiosAntesDeCerrar()
+          : true
+      `);
+
+      if (canClose === false) {
+        return;
+      }
+    } catch (error) {
+      console.error('No se pudo ejecutar el guardado antes de cerrar:', error);
+    }
+
+    allowWindowClose = true;
+    mainWindow.close();
+  });
+
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 }
 
@@ -45,6 +71,7 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
+    allowWindowClose = false;
     createWindow();
   }
 });
