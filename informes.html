@@ -614,6 +614,22 @@
             studentSelect.value = state.selectedStudent;
         }
 
+        // Sistema de batching para reducir reflows (optimización 3.1)
+        let renderScheduled = false;
+        const renderQueue = [];
+
+        function scheduleRender(renderFn) {
+            renderQueue.push(renderFn);
+            if (!renderScheduled) {
+                renderScheduled = true;
+                requestAnimationFrame(() => {
+                    renderQueue.forEach(fn => fn());
+                    renderQueue.length = 0;
+                    renderScheduled = false;
+                });
+            }
+        }
+
         function renderReport() {
             const selected = getSelectedSeries();
             const finalEvaluation = selected.find((item) => item.value === "final");
@@ -630,11 +646,12 @@
             averageGrade.textContent = average === null ? "-" : formatGrade(average);
             passedEvaluations.textContent = `${passed}/${numericGrades.length}`;
 
-            renderEvolutionChart(selected);
-            renderGroupBars();
-            renderSummaryTable(selected);
-            renderFocusDetail(selected);
-            renderEvaluationReports(selected);
+            // Batching: agregar renders a queue en lugar de ejecutar inmediatamente
+            scheduleRender(() => renderEvolutionChart(selected));
+            scheduleRender(() => renderGroupBars());
+            scheduleRender(() => renderSummaryTable(selected));
+            scheduleRender(() => renderFocusDetail(selected));
+            scheduleRender(() => renderEvaluationReports(selected));
         }
 
         function getSelectedSeries() {
@@ -651,18 +668,30 @@
             return (data.alumnos || []).find((alumno) => alumno.nombre === student) || null;
         }
 
+        // Cache para getEvaluationStats (optimización 3.2 - memoization)
+        const evalStatsCache = new WeakMap();
+
         function getEvaluationStats(data) {
+            // Usar WeakMap para cachear por referencia de objeto
+            if (evalStatsCache.has(data)) {
+                return evalStatsCache.get(data);
+            }
+
             const grades = (data.alumnos || [])
                 .map((alumno) => alumno.final)
                 .filter((value) => typeof value === "number");
             const average = grades.length
                 ? grades.reduce((total, value) => total + value, 0) / grades.length
                 : null;
-            return {
+
+            const result = {
                 total: data.alumnos ? data.alumnos.length : 0,
                 passed: grades.filter((value) => value >= 5).length,
                 average
             };
+
+            evalStatsCache.set(data, result);
+            return result;
         }
 
         function renderEvolutionChart(series) {
