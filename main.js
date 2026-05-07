@@ -486,6 +486,7 @@ async function saveRraaCriteriosToFile(filePath, rraa, criterios, ponderacionesU
     DATOS: (sheetXml) => {
       let xml = sheetXml;
 
+      // Actualizar RRAA
       for (let idx = 0; idx < rraaRowsToClear; idx += 1) {
         const rowIdx = rraaStart + idx;
         xml = setXmlCell(xml, rowIdx, 5, null);
@@ -498,19 +499,29 @@ async function saveRraaCriteriosToFile(filePath, rraa, criterios, ponderacionesU
         xml = setXmlCell(xml, rowIdx, 6, item.descripcion, 'text');
       });
 
-      normalizedCriterios.forEach((criterio) => {
-        const rowIdx = findCriterionTextRow(datosRows, criterio.codigo);
-
-        if (rowIdx !== -1) {
+      // Actualizar Criterios (código y texto)
+      const criteriosStartRow = findCriteriosStartRow(datosRows);
+      if (criteriosStartRow !== -1) {
+        normalizedCriterios.forEach((criterio, idx) => {
+          const rowIdx = criteriosStartRow + idx;
+          xml = setXmlCell(xml, rowIdx, 21, criterio.codigo, 'text');
           xml = setXmlCell(xml, rowIdx, 22, criterio.texto || null, 'text');
+        });
+
+        // Limpiar criterios antiguos
+        for (let idx = normalizedCriterios.length; idx < 50; idx += 1) {
+          const rowIdx = criteriosStartRow + idx;
+          xml = setXmlCell(xml, rowIdx, 21, null);
+          xml = setXmlCell(xml, rowIdx, 22, null);
         }
-      });
+      }
 
       return xml;
     },
     PESOS: (sheetXml) => {
       let xml = sheetXml;
 
+      // Actualizar códigos de criterios en fila 3
       normalizedCriterios.forEach((criterio) => {
         const colIdx = criterio.colIdx ?? findCriterionColumnForSave(criterio, normalizedCriterios);
 
@@ -521,6 +532,7 @@ async function saveRraaCriteriosToFile(filePath, rraa, criterios, ponderacionesU
         xml = setXmlCell(xml, 3, colIdx, criterio.codigo, 'text');
       });
 
+      // Actualizar ponderaciones por unidad (filas 5-20)
       normalizedUnitWeights.forEach((unidad) => {
         Object.entries(unidad.ponderaciones).forEach(([colKey, values]) => {
           const colIdx = Number(colKey);
@@ -562,6 +574,25 @@ function findRraaStartRow(rows) {
   });
 
   return headerRowIdx === -1 ? -1 : headerRowIdx + 1;
+}
+
+function findCriteriosStartRow(rows) {
+  // Busca la fila donde empieza la sección de criterios (donde está el primer código en columna 21)
+  // Generalmente está después de la sección de unidades
+  let startRow = 0;
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i] || [];
+    const codigo = row[21];
+
+    // El primer código de criterio tiene el formato "1.a)"
+    if (codigo && String(codigo).match(/^\d+\.[a-z]\)/i)) {
+      startRow = i;
+      break;
+    }
+  }
+
+  return startRow > 0 ? startRow : -1;
 }
 
 function normalizeUnitWeights(ponderacionesUnidad) {
