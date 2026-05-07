@@ -462,6 +462,44 @@
             margin-bottom: 15px;
         }
 
+        .save-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9em;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        .save-status.saving {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .save-status.saved {
+            background: #28a745;
+            color: white;
+        }
+
+        .save-status.error {
+            background: #dc3545;
+            color: white;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
         /* RESPONSIVO */
         @media (max-width: 768px) {
             .header h1 {
@@ -582,6 +620,8 @@
     </style>
 </head>
 <body>
+    <div id="saveStatus" class="save-status" style="display: none;"></div>
+
     <div class="container">
         <nav class="page-nav" aria-label="Navegación">
             <div class="nav-group">
@@ -746,6 +786,7 @@
                         <div class="actions-left">
                             <button class="secondary" onclick="cargarNuevo()">🔄 Cargar Otro Archivo</button>
                             <button class="secondary" onclick="mostrarOpcionesImportacion()">📂 Importar RRAA, CE, Unidades</button>
+                            <button onclick="guardarCambiosForzado()" style="background: #17a2b8; color: white;">💾 Guardar Cambios Ahora</button>
                         </div>
                         <div class="actions-right">
                             <button onclick="descargarExcel()">📥 Descargar Excel Actualizado</button>
@@ -774,6 +815,8 @@
         let ponderacionUnidadActiva = null;
         let ponderacionRaActiva = null;
         const isElectronMode = Boolean(window.electronExcel);
+        let autoSaveTimeout = null;
+        let hayChangesSinGuardar = false;
 
         // ===== VERIFICACIÓN DE LIBRERÍA XLSX =====
         function checkXLSX() {
@@ -1189,6 +1232,7 @@
             criteriosActuales[idx].raDescripcion = rraa ? rraa.descripcion : '';
             criteriosActuales[idx].colIdx = null;
             criterioRaActivo = raNumero;
+            marcarCambio();
             actualizarFiltroRA();
             mostrarTablaCriterios();
         }
@@ -1199,6 +1243,7 @@
                 criteriosActuales[idx].ponderacionInstituto,
                 criteriosActuales[idx].ponderacionEmpresa
             );
+            marcarCambio();
             mostrarTablaCriterios();
         }
 
@@ -1268,6 +1313,7 @@
                 unidad.ponderaciones[colIdx].ponderacionInstituto,
                 unidad.ponderaciones[colIdx].ponderacionEmpresa
             );
+            marcarCambio();
             mostrarTablaPonderacionesUnidad();
         }
 
@@ -1368,6 +1414,7 @@
             mostrarTablaRRAA();
             actualizarStatsRRAA();
             document.getElementById('nuevoRRAA').value = '';
+            marcarCambio();
             mostrarMensaje('✅ RRAA agregado', 'success');
         }
 
@@ -1408,6 +1455,7 @@
             document.getElementById('nuevoPonderacion').value = '';
             document.getElementById('nuevoPonderacionInstituto').value = '';
             document.getElementById('nuevoPonderacionEmpresa').value = '';
+            marcarCambio();
             mostrarMensaje('✅ Criterio agregado', 'success');
         }
 
@@ -1418,6 +1466,7 @@
                 raaaActuales.splice(idx, 1);
                 mostrarTablaRRAA();
                 actualizarStatsRRAA();
+                marcarCambio();
                 mostrarMensaje('✅ RRAA eliminado', 'success');
             }
         }
@@ -1428,6 +1477,7 @@
                 criteriosActuales.splice(idx, 1);
                 mostrarTablaCriterios();
                 actualizarStatsCriterios();
+                marcarCambio();
                 mostrarMensaje('✅ Criterio eliminado', 'success');
             }
         }
@@ -1544,10 +1594,77 @@
             location.reload();
         }
 
+        // ===== GUARDADO AUTOMÁTICO =====
+        function marcarCambio() {
+            hayChangesSinGuardar = true;
+
+            // Cancelar timeout anterior si existe
+            if (autoSaveTimeout) {
+                clearTimeout(autoSaveTimeout);
+            }
+
+            // Guardar automáticamente después de 2 segundos de inactividad
+            autoSaveTimeout = setTimeout(() => {
+                guardarCambiosAutomaticamente();
+            }, 2000);
+        }
+
+        function mostrarEstadoGuardado(estado, mensaje) {
+            const statusEl = document.getElementById('saveStatus');
+            statusEl.textContent = mensaje;
+            statusEl.className = `save-status ${estado}`;
+            statusEl.style.display = 'block';
+
+            if (estado !== 'saving') {
+                setTimeout(() => {
+                    statusEl.style.display = 'none';
+                }, 3000);
+            }
+        }
+
+        async function guardarCambiosAutomaticamente() {
+            if (!hayChangesSinGuardar || !isElectronMode) {
+                return;
+            }
+
+            try {
+                mostrarEstadoGuardado('saving', '💾 Guardando...');
+                const result = await window.electronExcel.saveRraaCriterios({
+                    rraa: raaaActuales,
+                    criterios: criteriosActuales,
+                    ponderacionesUnidad: ponderacionesUnidad
+                });
+
+                raaaActuales = result.rraa;
+                criteriosActuales = result.criterios;
+                ponderacionesUnidad = result.ponderacionesUnidad || [];
+                hayChangesSinGuardar = false;
+
+                mostrarEstadoGuardado('saved', '✅ Guardado exitosamente');
+                console.log('Cambios guardados automáticamente');
+            } catch (error) {
+                mostrarEstadoGuardado('error', '❌ Error al guardar');
+                console.error('Error en guardado automático:', error);
+            }
+        }
+
+        function guardarCambiosForzado() {
+            if (!isElectronMode) {
+                mostrarMensaje('⚠️ Solo disponible en modo local (Electron)', 'info');
+                return;
+            }
+
+            guardarCambiosAutomaticamente();
+        }
+
         async function guardarExcelLocal() {
             try {
                 mostrarLoading(true);
-                const result = await window.electronExcel.saveRraaCriterios(raaaActuales, criteriosActuales, ponderacionesUnidad);
+                const result = await window.electronExcel.saveRraaCriterios({
+                    rraa: raaaActuales,
+                    criterios: criteriosActuales,
+                    ponderacionesUnidad: ponderacionesUnidad
+                });
                 raaaActuales = result.rraa;
                 criteriosActuales = result.criterios;
                 ponderacionesUnidad = result.ponderacionesUnidad || [];
@@ -1557,6 +1674,7 @@
                 actualizarStatsRRAA();
                 actualizarStatsCriterios();
                 actualizarOpcionesPonderacion();
+                hayChangesSinGuardar = false;
                 mostrarMensaje(`RRAA y CE guardados en ${result.fileName}`, 'success');
                 mostrarLoading(false);
             } catch (error) {
