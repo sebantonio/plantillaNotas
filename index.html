@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Notas FP - Panel de Control</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 50px;
+            animation: slideDown 0.6s ease;
+        }
+
+        .header h1 {
+            font-size: 3.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .header p {
+            font-size: 1.3em;
+            opacity: 0.95;
+            margin-bottom: 5px;
+        }
+
+        .header .subtitle {
+            font-size: 1em;
+            opacity: 0.8;
+            margin-top: 10px;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 50px;
+            animation: fadeIn 0.8s ease 0.2s both;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 40px 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 5px;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+        }
+
+        .card-icon {
+            font-size: 3.5em;
+            margin-bottom: 20px;
+            display: inline-block;
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .card:nth-child(1) .card-icon { animation-delay: 0s; }
+        .card:nth-child(2) .card-icon { animation-delay: 0.2s; }
+        .card:nth-child(3) .card-icon { animation-delay: 0.4s; }
+
+        .card h2 {
+            color: #667eea;
+            font-size: 1.8em;
+            margin-bottom: 15px;
+        }
+
+        .card p {
+            color: #666;
+            font-size: 1.05em;
+            line-height: 1.6;
+            margin-bottom: 25px;
+        }
+
+        .card-features {
+            list-style: none;
+            margin-bottom: 25px;
+        }
+
+        .card-features li {
+            color: #555;
+            padding: 8px 0;
+            padding-left: 25px;
+            position: relative;
+            font-size: 0.95em;
+        }
+
+        .card-features li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #667eea;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        .card-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 40px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.05em;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            text-align: center;
+        }
+
+        .card-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .card-button:active {
+            transform: scale(0.98);
+        }
+
+        .info-section {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            margin-top: 40px;
+            animation: fadeIn 0.8s ease 0.4s both;
+        }
+
+        .info-section h2 {
+            color: #667eea;
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 30px;
+            margin-top: 25px;
+        }
+
+        .info-item {
+            padding: 20px;
+            background: #f8f9ff;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .info-item h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.15em;
+        }
+
+        .info-item p {
+            color: #666;
+            line-height: 1.6;
+            font-size: 0.95em;
+        }
+
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 60px;
+            padding-top: 30px;
+            border-top: 1px solid rgba(255,255,255,0.2);
+            font-size: 0.95em;
+            opacity: 0.9;
+        }
+
+        .status-badge {
+            display: inline-block;
+            background: #4caf50;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            margin-top: 10px;
+            font-weight: 600;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2.5em;
+            }
+
+            .header p {
+                font-size: 1.1em;
+            }
+
+            .cards-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+
+            .card {
+                padding: 30px 20px;
+            }
+
+            .card h2 {
+                font-size: 1.5em;
+            }
+
+            .info-section {
+                padding: 25px;
+            }
+
+            .info-section h2 {
+                font-size: 1.5em;
+            }
+
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Dark mode support */
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            }
+
+            .card,
+            .info-section {
+                background: #2a2a3e;
+                color: #e0e0e0;
+            }
+
+            .card h2,
+            .info-section h2 {
+                color: #667eea;
+            }
+
+            .card p {
+                color: #b0b0b0;
+            }
+
+            .info-item {
+                background: #3a3a4e;
+                color: #e0e0e0;
+            }
+
+            .info-item h3 {
+                color: #667eea;
+            }
+
+            .info-item p {
+                color: #b0b0b0;
+            }
+        }
+
+        .version {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(255,255,255,0.1);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            backdrop-filter: blur(10px);
+        }
+
+        /* Quick stats */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 40px;
+        }
+
+        .stat {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            animation: fadeIn 0.6s ease;
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- HEADER -->
+        <div class="header">
+            <h1>📊 Gestor de Notas FP</h1>
+            <p>Sistema Profesional de Gestión de Notas</p>
+            <p class="subtitle">Panel de Control - v0.1.0</p>
+        </div>
+
+        <!-- STATS -->
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-number">2</div>
+                <div class="stat-label">Gestores Activos</div>
+            </div>
+            <div class="stat">
+                <div class="stat-number">100%</div>
+                <div class="stat-label">Sin Servidor</div>
+            </div>
+            <div class="stat">
+                <div class="stat-number">∞</div>
+                <div class="stat-label">Alumnos/Criterios</div>
+            </div>
+            <div class="stat">
+                <div class="stat-number">✅</div>
+                <div class="stat-label">Listo para Producción</div>
+            </div>
+        </div>
+
+        <!-- CARDS -->
+        <div class="cards-grid">
+            <!-- CARD 1: ALUMNOS -->
+            <div class="card">
+                <div class="card-icon">👥</div>
+                <h2>Gestión de Alumnos</h2>
+                <p>Carga, visualiza y edita el listado completo de alumnos de tu módulo.</p>
+                <ul class="card-features">
+                    <li>Cargar Excel con alumnos</li>
+                    <li>Agregar nuevos alumnos</li>
+                    <li>Eliminar alumnos</li>
+                    <li>Descargar Excel actualizado</li>
+                    <li>Interfaz responsive</li>
+                </ul>
+                <a href="gestor-alumnos.html" class="card-button">Abrir Gestor de Alumnos</a>
+                <div class="status-badge">✓ Funcional</div>
+            </div>
+
+            <!-- CARD 2: RRAA Y CRITERIOS -->
+            <div class="card">
+                <div class="card-icon">🎯</div>
+                <h2>RRAA y Criterios</h2>
+                <p>Gestiona Resultados de Aprendizaje y Criterios de Evaluación.</p>
+                <ul class="card-features">
+                    <li>Editar RRAA existentes</li>
+                    <li>Agregar nuevos RRAA</li>
+                    <li>Editar criterios de evaluación</li>
+                    <li>Configurar ponderaciones (%)</li>
+                    <li>Dos pestañas intuitivas</li>
+                </ul>
+                <a href="gestor-rraa-criterios.html" class="card-button">Abrir Gestor RRAA/Criterios</a>
+                <div class="status-badge">✓ Funcional</div>
+            </div>
+
+            <!-- CARD 3: PRÓXIMO -->
+            <div class="card">
+                <div class="card-icon">📝</div>
+                <h2>Gestor de Notas</h2>
+                <p>Introducir y gestionar calificaciones de alumnos. (Próxima versión)</p>
+                <ul class="card-features">
+                    <li>Tabla de notas editable</li>
+                    <li>Cálculo de promedios</li>
+                    <li>Validación automática</li>
+                    <li>Exportación de reportes</li>
+                    <li>Gráficos y estadísticas</li>
+                </ul>
+                <button class="card-button" disabled style="opacity: 0.5; cursor: not-allowed;">En Desarrollo</button>
+                <div class="status-badge" style="background: #ff9800;">⏳ Próxima</div>
+            </div>
+        </div>
+
+        <!-- INFO SECTION -->
+        <div class="info-section">
+            <h2>💡 ¿Cómo usar?</h2>
+            
+            <div class="info-grid">
+                <div class="info-item">
+                    <h3>1️⃣ Cargar Excel</h3>
+                    <p>Abre cualquier gestor y carga tu archivo Excel (plantilla313.xlsx). El sistema detectará automáticamente alumnos, RRAA y criterios.</p>
+                </div>
+
+                <div class="info-item">
+                    <h3>2️⃣ Editar Datos</h3>
+                    <p>En cada gestor puedes agregar, editar o eliminar elementos. Los cambios se guardan en memoria mientras estés en la página.</p>
+                </div>
+
+                <div class="info-item">
+                    <h3>3️⃣ Descargar Excel</h3>
+                    <p>Cuando termines los cambios, descarga el archivo Excel actualizado con todos tus modificaciones.</p>
+                </div>
+
+                <div class="info-item">
+                    <h3>🔄 Sin Servidor</h3>
+                    <p>Todo funciona en tu navegador. No se guardan datos en servidores externos. Máxima privacidad y velocidad.</p>
+                </div>
+
+                <div class="info-item">
+                    <h3>📱 Responsive</h3>
+                    <p>Funciona en desktop, tablet y móvil. Perfectamente adaptado a cualquier tamaño de pantalla.</p>
+                </div>
+
+                <div class="info-item">
+                    <h3>🌐 Acceso Público</h3>
+                    <p>Accede desde cualquier navegador y en cualquier momento. No necesitas instalar nada.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- INFO SECTION 2 -->
+        <div class="info-section" style="margin-top: 30px;">
+            <h2>📋 Requisitos de Estructura Excel</h2>
+            
+            <div class="info-grid">
+                <div class="info-item">
+                    <h3>Hoja "DATOS"</h3>
+                    <p>
+                        • Columna A: Nº (números secuenciales)
+                        <br>• Columna B: ALUMNADO (nombres de alumnos)
+                        <br>• Columna C: Fechas de nacimiento (opcional)
+                        <br>• Columna B (desde fila diferente): RRAA
+                    </p>
+                </div>
+
+                <div class="info-item">
+                    <h3>Hoja "PESOS"</h3>
+                    <p>
+                        • Columna A: Nombres de criterios
+                        <br>• Columna C: Ponderaciones (%)
+                        <br>• Filas 6-21: Datos de criterios
+                        <br>• Resto: Fórmulas (se preservan)
+                    </p>
+                </div>
+
+                <div class="info-item">
+                    <h3>Otras Hojas</h3>
+                    <p>
+                        • 1ª EVA, 2ª EVA, 3ª EVA
+                        <br>• EMPRESA, FINAL
+                        <br>• Todas se preservan
+                        <br>• Solo se actualizan DATOS y PESOS
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- FOOTER -->
+        <div class="footer">
+            <p>Gestor de Notas FP • Sistema de Gestión para Formación Profesional</p>
+            <p style="margin-top: 15px; font-size: 0.85em; opacity: 0.7;">
+                Versión 0.1.0 • Alojado en Cloudflare Pages • Licencia MIT
+            </p>
+        </div>
+    </div>
+
+    <!-- VERSION BADGE -->
+    <div class="version">v0.1.0</div>
+
+    <script>
+        // Analytics simple (opcional)
+        console.log('%c🎯 Gestor de Notas FP', 'color: #667eea; font-size: 20px; font-weight: bold;');
+        console.log('%cv0.1.0 - Sin servidor, 100% funcional en navegador', 'color: #764ba2; font-size: 12px;');
+        console.log('%cRepositorio: https://github.com/tu-usuario/gestor-notas-fp', 'color: #666; font-size: 12px;');
+        
+        // Animación al cargar
+        window.addEventListener('load', () => {
+            console.log('✅ Sistema cargado correctamente');
+        });
+
+        // Log de navegación
+        document.querySelectorAll('.card-button').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                if (e.target.hasAttribute('href')) {
+                    const page = e.target.getAttribute('href');
+                    console.log(`📱 Navegando a: ${page}`);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
