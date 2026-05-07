@@ -127,25 +127,28 @@ ipcMain.handle('excel:getRraaCriterios', async () => {
 });
 
 ipcMain.handle('excel:saveRraaCriterios', async (_event, payload) => {
-  if (!selectedExcelPath) {
-    selectedExcelPath = findDefaultExcelPath();
-  }
+  try {
+    if (!selectedExcelPath) {
+      selectedExcelPath = findDefaultExcelPath();
+    }
 
-  if (!selectedExcelPath) {
-    throw new Error('No hay ningun archivo Excel seleccionado.');
-  }
+    if (!selectedExcelPath) {
+      throw new Error('No hay ningun archivo Excel seleccionado.');
+    }
 
-  if (!payload || !Array.isArray(payload.rraa) || !Array.isArray(payload.criterios)) {
-    throw new Error('Los RRAA y criterios no tienen un formato valido.');
-  }
+    if (!payload) {
+      throw new Error('Los datos no tienen un formato valido.');
+    }
 
-  await saveRraaCriteriosToFile(
-    selectedExcelPath,
-    payload.rraa,
-    payload.criterios,
-    Array.isArray(payload.ponderacionesUnidad) ? payload.ponderacionesUnidad : []
-  );
-  return loadRraaCriteriosFromSelectedFile();
+    const rraa = Array.isArray(payload.rraa) ? payload.rraa : [];
+    const criterios = Array.isArray(payload.criterios) ? payload.criterios : [];
+    const ponderacionesUnidad = Array.isArray(payload.ponderacionesUnidad) ? payload.ponderacionesUnidad : [];
+
+    await saveRraaCriteriosToFile(selectedExcelPath, rraa, criterios, ponderacionesUnidad);
+    return loadRraaCriteriosFromSelectedFile();
+  } catch (error) {
+    throw new Error(`Error al guardar RRAA/CE: ${error.message}`);
+  }
 });
 
 ipcMain.handle('excel:getNotasActividad', async (_event, payload = {}) => {

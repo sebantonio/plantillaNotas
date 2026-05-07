@@ -1629,21 +1629,26 @@
 
             try {
                 mostrarEstadoGuardado('saving', '💾 Guardando...');
-                const result = await window.electronExcel.saveRraaCriterios({
+
+                const payload = {
                     rraa: raaaActuales,
                     criterios: criteriosActuales,
                     ponderacionesUnidad: ponderacionesUnidad
-                });
+                };
 
-                raaaActuales = result.rraa;
-                criteriosActuales = result.criterios;
-                ponderacionesUnidad = result.ponderacionesUnidad || [];
+                const result = await window.electronExcel.saveRraaCriterios(payload);
+
+                if (result && result.rraa) {
+                    raaaActuales = result.rraa;
+                    criteriosActuales = result.criterios || criteriosActuales;
+                    ponderacionesUnidad = result.ponderacionesUnidad || ponderacionesUnidad;
+                }
+
                 hayChangesSinGuardar = false;
-
-                mostrarEstadoGuardado('saved', '✅ Guardado exitosamente');
-                console.log('Cambios guardados automáticamente');
+                mostrarEstadoGuardado('saved', '✅ Guardado');
+                console.log('✅ Cambios guardados automáticamente');
             } catch (error) {
-                mostrarEstadoGuardado('error', '❌ Error al guardar');
+                mostrarEstadoGuardado('error', `❌ ${error.message || 'Error al guardar'}`);
                 console.error('Error en guardado automático:', error);
             }
         }
@@ -1660,25 +1665,32 @@
         async function guardarExcelLocal() {
             try {
                 mostrarLoading(true);
-                const result = await window.electronExcel.saveRraaCriterios({
+
+                const payload = {
                     rraa: raaaActuales,
                     criterios: criteriosActuales,
                     ponderacionesUnidad: ponderacionesUnidad
-                });
-                raaaActuales = result.rraa;
-                criteriosActuales = result.criterios;
-                ponderacionesUnidad = result.ponderacionesUnidad || [];
+                };
+
+                const result = await window.electronExcel.saveRraaCriterios(payload);
+
+                if (result && result.rraa) {
+                    raaaActuales = result.rraa;
+                    criteriosActuales = result.criterios || criteriosActuales;
+                    ponderacionesUnidad = result.ponderacionesUnidad || ponderacionesUnidad;
+                }
+
+                hayChangesSinGuardar = false;
                 mostrarTablaRRAA();
                 mostrarTablaCriterios();
                 mostrarTablaPonderacionesUnidad();
                 actualizarStatsRRAA();
                 actualizarStatsCriterios();
                 actualizarOpcionesPonderacion();
-                hayChangesSinGuardar = false;
-                mostrarMensaje(`RRAA y CE guardados en ${result.fileName}`, 'success');
+                mostrarMensaje(`✅ Guardado en ${result.fileName || 'archivo'}`, 'success');
                 mostrarLoading(false);
             } catch (error) {
-                mostrarMensaje('Error al guardar RRAA/CE: ' + error.message, 'error');
+                mostrarMensaje(`❌ Error: ${error.message}`, 'error');
                 mostrarLoading(false);
             }
         }
