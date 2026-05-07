@@ -165,6 +165,7 @@
             width: 100%;
             border-collapse: collapse;
             background: white;
+            table-layout: fixed;
         }
 
         table th {
@@ -177,7 +178,7 @@
         }
 
         table td {
-            padding: 12px 15px;
+            padding: 12px 10px;
             border-bottom: 1px solid #e0e0e0;
         }
 
@@ -203,6 +204,34 @@
         table textarea {
             min-height: 60px;
             resize: vertical;
+        }
+
+        .col-numero {
+            width: 52px;
+        }
+
+        .col-ra {
+            width: 100px;
+        }
+
+        .col-codigo {
+            width: 74px;
+        }
+
+        .col-ponderacion {
+            width: 120px;
+        }
+
+        .col-accion {
+            width: 86px;
+        }
+
+        .codigo-input {
+            width: 58px !important;
+            min-width: 58px !important;
+            max-width: 58px !important;
+            padding-left: 8px;
+            padding-right: 8px;
         }
 
         table input:focus,
@@ -650,14 +679,14 @@
                             <table id="criteriosTable">
                                 <thead>
                                     <tr>
-                                        <th style="width: 50px;">Nº</th>
-                                        <th style="width: 90px;">RA</th>
-                                        <th style="width: 56px;">Código</th>
+                                        <th class="col-numero">Nº</th>
+                                        <th class="col-ra">RA</th>
+                                        <th class="col-codigo">Código</th>
                                         <th>Criterio de Evaluación</th>
-                                        <th style="width: 120px;">Final</th>
-                                        <th style="width: 120px;">Instituto</th>
-                                        <th style="width: 120px;">Empresa</th>
-                                        <th style="width: 80px;">Acción</th>
+                                        <th class="col-ponderacion">Final</th>
+                                        <th class="col-ponderacion">Instituto</th>
+                                        <th class="col-ponderacion">Empresa</th>
+                                        <th class="col-accion">Acción</th>
                                     </tr>
                                 </thead>
                                 <tbody id="criteriosTableBody">
@@ -673,7 +702,7 @@
                         <h3>Agregar Nuevo Criterio</h3>
                         <div class="form-group">
                             <select id="nuevoCriterioRA" style="min-width: 120px;"></select>
-                            <input type="text" id="nuevoCriterio" placeholder="1.a)" maxlength="6" style="max-width: 62px;" />
+                            <input class="codigo-input" type="text" id="nuevoCriterio" placeholder="1.a)" maxlength="6" />
                             <textarea id="nuevoCriterioTexto" placeholder="Texto del criterio de evaluación" style="flex: 1;"></textarea>
                             <input type="number" id="nuevoPonderacion" placeholder="Final auto" min="0" max="1" step="0.01" readonly />
                             <input type="number" id="nuevoPonderacionInstituto" placeholder="Instituto" min="0" max="1" step="0.01" oninput="actualizarNuevaPonderacionFinal()" />
@@ -988,7 +1017,7 @@
                             ${opcionesRA(crit.raNumero)}
                         </select>
                     </td>
-                    <td><input type="text" value="${escaparHtml(crit.codigo || crit.nombre)}" maxlength="6" onchange="criteriosActuales[${idx}].codigo = this.value; criteriosActuales[${idx}].nombre = this.value" title="${escaparHtml(crit.raDescripcion || '')}" style="max-width: 58px;" /></td>
+                    <td><input class="codigo-input" type="text" value="${escaparHtml(crit.codigo || crit.nombre)}" maxlength="6" onchange="criteriosActuales[${idx}].codigo = this.value; criteriosActuales[${idx}].nombre = this.value" title="${escaparHtml(crit.raDescripcion || '')}" /></td>
                     <td><textarea onchange="criteriosActuales[${idx}].texto = this.value">${escaparHtml(crit.texto || '')}</textarea></td>
                     <td><input type="number" value="${crit.ponderacion || 0}" min="0" max="1" step="0.01" readonly /></td>
                     <td><input type="number" value="${crit.ponderacionInstituto || 0}" min="0" max="1" step="0.01" onchange="actualizarPonderacionCriterio(${idx}, 'ponderacionInstituto', this.value)" /></td>
