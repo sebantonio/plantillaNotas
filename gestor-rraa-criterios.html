@@ -1445,6 +1445,17 @@
             // Mostrar tab seleccionado
             document.getElementById('tab-' + tab).classList.add('active');
             event.target.classList.add('active');
+
+            // Refrescar las tablas según el tab seleccionado
+            if (tab === 'rraa') {
+                mostrarTablaRRAA();
+            } else if (tab === 'criterios') {
+                actualizarFiltroRA();
+                mostrarTablaCriterios();
+            } else if (tab === 'ponderaciones') {
+                actualizarOpcionesPonderacion();
+                mostrarTablaPonderacionesUnidad();
+            }
         }
 
         // ===== DESCARGAR EXCEL =====
