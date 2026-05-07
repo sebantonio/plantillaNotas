@@ -148,6 +148,49 @@ ipcMain.handle('excel:saveRraaCriterios', async (_event, payload) => {
   return loadRraaCriteriosFromSelectedFile();
 });
 
+ipcMain.handle('excel:getNotasActividad', async (_event, payload = {}) => {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  if (!selectedExcelPath) {
+    return null;
+  }
+
+  return loadNotasActividadFromSelectedFile(
+    payload.unidad || 'U1',
+    payload.tipo || 'practicas',
+    Number(payload.actividad) || 1
+  );
+});
+
+ipcMain.handle('excel:saveNotasActividad', async (_event, payload) => {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  if (!selectedExcelPath) {
+    throw new Error('No hay ningun archivo Excel seleccionado.');
+  }
+
+  if (!payload || !payload.unidad || !payload.tipo || !Array.isArray(payload.notas)) {
+    throw new Error('Los datos de notas no tienen un formato valido.');
+  }
+
+  await saveNotasActividadToFile(
+    selectedExcelPath,
+    payload.unidad,
+    payload.tipo,
+    Number(payload.actividad) || 1,
+    payload.notas
+  );
+  return loadNotasActividadFromSelectedFile(
+    payload.unidad,
+    payload.tipo,
+    Number(payload.actividad) || 1
+  );
+});
+
 ipcMain.handle('app:openExternal', async (_event, url) => {
   await shell.openExternal(url);
 });
