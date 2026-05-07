@@ -287,6 +287,10 @@
             margin-bottom: 14px;
         }
 
+        .detail-selector {
+            min-width: 240px;
+        }
+
         .criteria-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
@@ -387,6 +391,10 @@
                         <h2 id="detailName">Selecciona un alumno</h2>
                         <p id="detailFinal">Nota final: -</p>
                     </div>
+                    <div class="detail-selector">
+                        <label for="raDetailSelect">Ver criterios de</label>
+                        <select id="raDetailSelect"></select>
+                    </div>
                 </div>
                 <div id="criteriaGrid" class="criteria-grid"></div>
             </section>
@@ -396,6 +404,7 @@
     <script>
         let state = null;
         let selectedRowIdx = null;
+        let selectedRaColIdx = null;
 
         const messageBox = document.getElementById("message");
         const evaluationSelect = document.getElementById("evaluationSelect");
@@ -410,6 +419,7 @@
         const subtitle = document.getElementById("subtitle");
         const detailName = document.getElementById("detailName");
         const detailFinal = document.getElementById("detailFinal");
+        const raDetailSelect = document.getElementById("raDetailSelect");
         const criteriaGrid = document.getElementById("criteriaGrid");
 
         document.addEventListener("DOMContentLoaded", () => {
@@ -421,6 +431,10 @@
             reloadButton.addEventListener("click", loadNotes);
             searchInput.addEventListener("input", renderTable);
             evaluationSelect.addEventListener("change", loadNotes);
+            raDetailSelect.addEventListener("change", () => {
+                selectedRaColIdx = Number(raDetailSelect.value);
+                renderDetail();
+            });
             loadNotes();
         });
 
@@ -438,6 +452,7 @@
 
                 state = data;
                 selectedRowIdx = data.alumnos && data.alumnos[0] ? data.alumnos[0].rowIdx : null;
+                selectedRaColIdx = data.raColumns && data.raColumns[0] ? data.raColumns[0].colIdx : null;
                 renderAll();
                 showMessage("Notas cargadas correctamente.", "success");
             } catch (error) {
@@ -515,18 +530,44 @@
             if (!alumno) {
                 detailName.textContent = "Selecciona un alumno";
                 detailFinal.textContent = "Nota final: -";
+                raDetailSelect.innerHTML = "";
                 criteriaGrid.innerHTML = "";
                 return;
             }
 
             detailName.textContent = alumno.nombre;
             detailFinal.textContent = `Nota final: ${alumno.finalDisplay || "-"}`;
-            criteriaGrid.innerHTML = (alumno.criterios || []).map((criterio) => `
+            renderRaSelector(alumno);
+
+            const criterios = (alumno.criterios || []).filter((criterio) =>
+                Number(criterio.raColIdx) === Number(selectedRaColIdx)
+            );
+
+            if (!criterios.length) {
+                criteriaGrid.innerHTML = '<div class="criterion-card"><span>Sin criterios</span>-</div>';
+                return;
+            }
+
+            criteriaGrid.innerHTML = criterios.map((criterio) => `
                 <div class="criterion-card">
-                    <span>${escapeHtml(criterio.raLabel)} - ${escapeHtml(criterio.codigo)}</span>
+                    <span>${escapeHtml(criterio.codigo)}</span>
                     ${gradeBadge(criterio.nota, criterio.display)}
                 </div>
             `).join("");
+        }
+
+        function renderRaSelector(alumno) {
+            const raColumns = state.raColumns || [];
+
+            if (!raColumns.some((ra) => Number(ra.colIdx) === Number(selectedRaColIdx))) {
+                selectedRaColIdx = raColumns[0] ? raColumns[0].colIdx : null;
+            }
+
+            raDetailSelect.innerHTML = raColumns.map((ra) => {
+                const summary = (alumno.rraa || []).find((item) => Number(item.colIdx) === Number(ra.colIdx));
+                const label = summary && summary.display ? `${ra.label} - ${summary.display}` : ra.label;
+                return `<option value="${ra.colIdx}" ${Number(ra.colIdx) === Number(selectedRaColIdx) ? "selected" : ""}>${escapeHtml(label)}</option>`;
+            }).join("");
         }
 
         function gradeBadge(value, display) {
