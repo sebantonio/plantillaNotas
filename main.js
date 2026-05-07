@@ -243,6 +243,7 @@ function loadRraaCriteriosFromSelectedFile() {
   const datosRows = XLSX.utils.sheet_to_json(workbook.Sheets.DATOS, { header: 1, defval: null });
   const pesosRows = XLSX.utils.sheet_to_json(workbook.Sheets.PESOS, { header: 1, defval: null });
   const rraaStart = findRraaStartRow(datosRows);
+  const criterionTexts = extractCriterionTexts(datosRows);
 
   if (rraaStart === -1) {
     throw new Error('No se encontro la seccion RRAA en la hoja DATOS.');
@@ -286,6 +287,7 @@ function loadRraaCriteriosFromSelectedFile() {
       ponderacion: pesosRows[21] && pesosRows[21][colIdx] ? pesosRows[21][colIdx] : 0,
       ponderacionInstituto: pesosRows[21] && pesosRows[21][colIdx + 1] ? pesosRows[21][colIdx + 1] : 0,
       ponderacionEmpresa: pesosRows[21] && pesosRows[21][colIdx + 2] ? pesosRows[21][colIdx + 2] : 0,
+      texto: criterionTexts[normalizeCriterionCode(codigo)] || '',
       colIdx
     });
   }
@@ -400,6 +402,7 @@ async function saveRraaCriteriosToFile(filePath, rraa, criterios) {
   const normalizedCriterios = criterios.map((item) => ({
     codigo: String(item.codigo || item.nombre || '').trim(),
     raNumero: Number(item.raNumero) || criterionRaNumber(item.codigo || item.nombre),
+    texto: String(item.texto || '').trim(),
     ponderacion: Number(item.ponderacion) || 0,
     ponderacionInstituto: Number(item.ponderacionInstituto) || 0,
     ponderacionEmpresa: Number(item.ponderacionEmpresa) || 0,
@@ -420,6 +423,14 @@ async function saveRraaCriteriosToFile(filePath, rraa, criterios) {
         const rowIdx = rraaStart + idx;
         xml = setXmlCell(xml, rowIdx, 5, item.numero, 'number');
         xml = setXmlCell(xml, rowIdx, 6, item.descripcion, 'text');
+      });
+
+      normalizedCriterios.forEach((criterio) => {
+        const rowIdx = findCriterionTextRow(datosRows, criterio.codigo);
+
+        if (rowIdx !== -1) {
+          xml = setXmlCell(xml, rowIdx, 22, criterio.texto || null, 'text');
+        }
       });
 
       return xml;
@@ -477,6 +488,34 @@ function findRraaStartRow(rows) {
 
 function isCriterionCode(value) {
   return Boolean(value && /^\d+\.[a-z]\)/i.test(String(value).trim()));
+}
+
+function normalizeCriterionCode(value) {
+  return String(value || '').trim().replace(/\)$/u, '').toLowerCase();
+}
+
+function extractCriterionTexts(rows) {
+  const texts = {};
+
+  rows.forEach((row) => {
+    const code = row && row[21];
+    const text = row && row[22];
+
+    if (code && text && isCriterionCode(`${code})`)) {
+      texts[normalizeCriterionCode(code)] = String(text).trim();
+    }
+  });
+
+  return texts;
+}
+
+function findCriterionTextRow(rows, code) {
+  const normalized = normalizeCriterionCode(code);
+
+  return rows.findIndex((row) => {
+    const rowCode = row && row[21];
+    return rowCode && normalizeCriterionCode(rowCode) === normalized;
+  });
 }
 
 function criterionRaNumber(value) {
