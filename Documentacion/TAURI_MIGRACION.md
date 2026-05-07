@@ -11,20 +11,21 @@ La aplicacion ya tiene una primera base Tauri en `src-tauri/`.
 
 Este enfoque permite seguir desarrollando con Tauri sin reescribir de golpe toda la manipulacion XML del Excel.
 
-## Requisito pendiente
+## Rust
 
-En este equipo todavia no esta instalado Rust:
-
-- `rustc`: no instalado
-- `cargo`: no instalado
-
-Instalalo desde:
+Rust ya esta instalado en este equipo, pero si una terminal antigua no lo detecta puedes cerrar y volver a abrir Visual Studio Code o ejecutar temporalmente:
 
 ```powershell
-winget install Rustlang.Rustup
+$env:Path="$env:USERPROFILE\.cargo\bin;$env:Path"
 ```
 
-Despues cierra y vuelve a abrir Visual Studio Code o PowerShell.
+Comprobado con:
+
+```powershell
+rustc --version
+cargo --version
+npm run tauri -- info
+```
 
 ## Comandos
 
@@ -33,6 +34,15 @@ npm install
 npm run tauri -- info
 npm run tauri:dev
 npm run tauri:build
+```
+
+## Artefactos generados
+
+La compilacion Tauri ya se ha completado correctamente. Rutas principales:
+
+```text
+src-tauri/target/release/plantilla-notas-local.exe
+src-tauri/target/release/bundle/nsis/Plantilla Notas Local_0.1.0_x64-setup.exe
 ```
 
 ## Siguiente fase recomendada
