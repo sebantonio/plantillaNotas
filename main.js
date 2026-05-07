@@ -227,6 +227,18 @@ ipcMain.handle('excel:saveNotasActividad', async (_event, payload) => {
   );
 });
 
+ipcMain.handle('excel:getNotasEvaluacion', async (_event, payload = {}) => {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  if (!selectedExcelPath) {
+    return null;
+  }
+
+  return loadNotasEvaluacionFromSelectedFile(payload.evaluacion || '1');
+});
+
 ipcMain.handle('app:openExternal', async (_event, url) => {
   await shell.openExternal(url);
 });
@@ -480,6 +492,175 @@ async function saveNotasActividadToFile(filePath, unidad, tipo, actividad, notas
       return xml;
     }
   });
+}
+
+function loadNotasEvaluacionFromSelectedFile(evaluacion = '1') {
+  const workbook = XLSX.readFile(selectedExcelPath, { cellDates: true, cellFormula: true });
+  const sheetName = findEvaluationSheetName(workbook, evaluacion);
+
+  if (!sheetName) {
+    throw new Error(`No se encontro la hoja de la ${evaluacion} evaluacion.`);
+  }
+
+  const sheet = workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
+  const title = getCellDisplay(sheet, 2, 0) || sheetName;
+  const raColumns = findEvaluationRaColumns(sheet, rows);
+  const finalColumn = findEvaluationFinalColumn(sheet, rows);
+  const criteria = findEvaluationCriteriaColumns(sheet, rows, raColumns, finalColumn);
+  const alumnos = extractEvaluationStudents(sheet, rows, raColumns, finalColumn, criteria);
+
+  return {
+    filePath: selectedExcelPath,
+    fileName: path.basename(selectedExcelPath),
+    sheetName,
+    title,
+    evaluacion: String(evaluacion),
+    raColumns,
+    criteria,
+    alumnos
+  };
+}
+
+function findEvaluationSheetName(workbook, evaluacion) {
+  const target = String(evaluacion || '1').trim();
+  return workbook.SheetNames.find((name) => {
+    const normalized = normalizePlainText(name);
+    return (
+      normalized.includes(`${target}`) &&
+      normalized.includes('EVA') &&
+      !normalized.includes('MAX') &&
+      !normalized.includes('SOLO')
+    );
+  });
+}
+
+function findEvaluationRaColumns(sheet, rows) {
+  const raHeaderRow = rows[15] || [];
+  const summaryRow = rows[16] || [];
+  const columns = [];
+
+  summaryRow.forEach((value, colIdx) => {
+    if (normalizePlainText(value) === 'NOTA CE') {
+      const label = getCellDisplay(sheet, 15, colIdx) || `RRAA ${columns.length + 1}`;
+      columns.push({
+        colIdx,
+        address: columnName(colIdx),
+        label,
+        peso: getCellDisplay(sheet, 13, colIdx) || ''
+      });
+    }
+  });
+
+  return columns;
+}
+
+function findEvaluationFinalColumn(sheet, rows) {
+  const summaryRow = rows[16] || [];
+  const colIdx = summaryRow.findIndex((value) => normalizePlainText(value) === 'NOTA FINAL');
+
+  if (colIdx === -1) {
+    throw new Error('No se encontro la columna NOTA FINAL en la evaluacion.');
+  }
+
+  return {
+    colIdx,
+    address: columnName(colIdx),
+    label: 'Nota final'
+  };
+}
+
+function findEvaluationCriteriaColumns(sheet, rows, raColumns, finalColumn) {
+  const codeRow = rows[17] || [];
+  const criteria = [];
+
+  raColumns.forEach((ra, idx) => {
+    const nextRa = raColumns[idx + 1];
+    const startCol = ra.colIdx + 1;
+    const endCol = nextRa ? nextRa.colIdx - 1 : finalColumn.colIdx - 1;
+
+    for (let colIdx = startCol; colIdx <= endCol; colIdx += 1) {
+      const code = codeRow[colIdx];
+
+      if (!isEvaluationCriterionCode(code)) {
+        continue;
+      }
+
+      criteria.push({
+        colIdx,
+        address: columnName(colIdx),
+        raColIdx: ra.colIdx,
+        raLabel: ra.label,
+        codigo: String(code).trim(),
+        peso: getCellDisplay(sheet, 12, colIdx) || ''
+      });
+    }
+  });
+
+  return criteria;
+}
+
+function extractEvaluationStudents(sheet, rows, raColumns, finalColumn, criteria) {
+  const alumnos = [];
+
+  for (let rowIdx = 18; rowIdx < rows.length; rowIdx += 1) {
+    const nombre = getCellDisplay(sheet, rowIdx, 0);
+
+    if (!nombre || String(nombre).trim() === '') {
+      continue;
+    }
+
+    if (normalizePlainText(nombre).includes('MEDIA') || normalizePlainText(nombre).includes('PONDERACION')) {
+      continue;
+    }
+
+    alumnos.push({
+      rowIdx,
+      numero: alumnos.length + 1,
+      nombre: String(nombre).trim(),
+      final: getEvaluationNumber(sheet, rowIdx, finalColumn.colIdx),
+      finalDisplay: getCellDisplay(sheet, rowIdx, finalColumn.colIdx),
+      rraa: raColumns.map((ra) => ({
+        colIdx: ra.colIdx,
+        label: ra.label,
+        nota: getEvaluationNumber(sheet, rowIdx, ra.colIdx),
+        display: getCellDisplay(sheet, rowIdx, ra.colIdx)
+      })),
+      criterios: criteria.map((criterion) => ({
+        colIdx: criterion.colIdx,
+        raColIdx: criterion.raColIdx,
+        raLabel: criterion.raLabel,
+        codigo: criterion.codigo,
+        nota: getEvaluationNumber(sheet, rowIdx, criterion.colIdx),
+        display: getCellDisplay(sheet, rowIdx, criterion.colIdx)
+      }))
+    });
+  }
+
+  return alumnos;
+}
+
+function isEvaluationCriterionCode(value) {
+  return Boolean(value && /^\d+\.?[a-z]\)?$/i.test(String(value).trim()));
+}
+
+function getCellDisplay(sheet, rowIdx, colIdx) {
+  const address = XLSX.utils.encode_cell({ r: rowIdx, c: colIdx });
+  const cell = sheet[address];
+
+  if (!cell || cell.v === null || cell.v === undefined || cell.v === '') {
+    return '';
+  }
+
+  return cell.w !== undefined ? String(cell.w) : String(cell.v);
+}
+
+function getEvaluationNumber(sheet, rowIdx, colIdx) {
+  const address = XLSX.utils.encode_cell({ r: rowIdx, c: colIdx });
+  const cell = sheet[address];
+  const value = cell && cell.v !== undefined ? cell.v : null;
+  const numeric = Number(value);
+  return Number.isNaN(numeric) ? null : numeric;
 }
 
 async function saveAlumnosToFile(filePath, alumnos) {
