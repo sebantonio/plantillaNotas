@@ -488,9 +488,15 @@
         let workbook = null;
         let archivoOriginal = null;
         let xlsxReady = false;
+        const isElectronMode = Boolean(window.electronExcel);
 
         // ===== VERIFICACIÓN DE LIBRERÍA XLSX =====
         function checkXLSX() {
+            if (isElectronMode) {
+                xlsxReady = true;
+                return true;
+            }
+
             if (typeof XLSX === 'undefined') {
                 mostrarMensaje('⚠️ Cargando librerías... Por favor espera', 'info');
                 return false;
@@ -511,6 +517,11 @@
         const fileInput = document.getElementById('fileInput');
 
         uploadArea.addEventListener('click', () => {
+            if (isElectronMode) {
+                seleccionarArchivoLocal();
+                return;
+            }
+
             if (!xlsxReady) {
                 mostrarMensaje('⚠️ Cargando librerías... Por favor espera un momento', 'info');
                 return;
@@ -530,6 +541,11 @@
         uploadArea.addEventListener('drop', (e) => {
             e.preventDefault();
             uploadArea.classList.remove('dragging');
+            if (isElectronMode) {
+                mostrarMensaje('Usa el selector de archivo para conectar un Excel local.', 'info');
+                return;
+            }
+
             if (!xlsxReady) {
                 mostrarMensaje('⚠️ Cargando librerías... Por favor espera un momento', 'info');
                 return;
@@ -545,6 +561,31 @@
                 cargarArchivo(e.target.files[0]);
             }
         });
+
+        // ===== CARGAR ARCHIVO LOCAL EN ELECTRON =====
+        async function seleccionarArchivoLocal() {
+            try {
+                mostrarLoading(true);
+                const result = await window.electronExcel.selectFile();
+
+                if (!result) {
+                    mostrarLoading(false);
+                    return;
+                }
+
+                archivoOriginal = { name: result.fileName, path: result.filePath };
+                workbook = null;
+                mostrarTablaAlumnos(result.alumnos);
+                actualizarStats(result.alumnos);
+                document.getElementById('uploadArea').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+                mostrarMensaje(`Archivo conectado: ${result.fileName}`, 'success');
+                mostrarLoading(false);
+            } catch (error) {
+                mostrarMensaje('Error al abrir el Excel local: ' + error.message, 'error');
+                mostrarLoading(false);
+            }
+        }
 
         // ===== CARGAR ARCHIVO =====
         function cargarArchivo(file) {
@@ -724,6 +765,11 @@
 
         // ===== DESCARGAR EXCEL =====
         function descargarExcel() {
+            if (isElectronMode) {
+                guardarExcelLocal();
+                return;
+            }
+
             if (!workbook) {
                 mostrarMensaje('❌ No hay archivo cargado', 'error');
                 return;
@@ -798,7 +844,31 @@
 
         // ===== CARGAR NUEVO ARCHIVO =====
         function cargarNuevo() {
-            location.reload();
+            if (isElectronMode) {
+                seleccionarArchivoLocal();
+            } else {
+                location.reload();
+            }
+        }
+
+        async function guardarExcelLocal() {
+            if (!archivoOriginal) {
+                mostrarMensaje('No hay archivo local seleccionado', 'error');
+                return;
+            }
+
+            mostrarLoading(true);
+
+            try {
+                const result = await window.electronExcel.saveAlumnos(window.alumnosActuales);
+                mostrarTablaAlumnos(result.alumnos);
+                actualizarStats(result.alumnos);
+                mostrarMensaje(`Guardado directamente en: ${result.fileName}`, 'success');
+                mostrarLoading(false);
+            } catch (error) {
+                mostrarMensaje('Error al guardar el Excel local: ' + error.message, 'error');
+                mostrarLoading(false);
+            }
         }
 
         // ===== FUNCIONES AUXILIARES =====
@@ -831,11 +901,17 @@
         // Inicializar
         window.alumnosActuales = [];
 
+        if (isElectronMode) {
+            document.querySelector('.upload-text').innerHTML = '<strong>Selecciona tu Excel local</strong>';
+            document.querySelector('.upload-hint').textContent = 'Puede estar en una carpeta sincronizada de OneDrive';
+            document.querySelector('.actions-right button').textContent = 'Guardar cambios en el Excel';
+        }
+
         // Verificar carga de XLSX cada 500ms hasta que esté listo
         const xlsxCheckInterval = setInterval(() => {
             if (checkXLSX()) {
                 clearInterval(xlsxCheckInterval);
-                mostrarMensaje('✅ Sistema listo', 'success');
+                mostrarMensaje(isElectronMode ? 'Modo local listo' : '✅ Sistema listo', 'success');
             }
         }, 500);
     </script>

@@ -1,0 +1,15 @@
+{
+  "name": "plantilla-notas-local",
+  "version": "0.1.0",
+  "description": "Aplicacion local para gestionar alumnos en una plantilla Excel sincronizada con OneDrive.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "electron": "^30.5.1"
+  }
+}
