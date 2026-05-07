@@ -450,6 +450,9 @@
         let archivoOriginal = null;
         let unidadesActuales = [];
         const isElectronMode = Boolean(window.electronExcel);
+        let autoSaveTimeout = null;
+        let hayCambiosSinGuardar = false;
+        const AUTO_SAVE_DELAY_MS = 15000;
 
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
@@ -505,6 +508,8 @@
 
                 archivoOriginal = { name: result.fileName, path: result.filePath };
                 unidadesActuales = result.unidades;
+                hayCambiosSinGuardar = false;
+                limpiarTemporizadorAutoguardado();
                 mostrarContenido(result.fileName);
                 mostrarLoading(false);
             } catch (error) {
@@ -601,6 +606,7 @@
         function actualizarUnidad(idx, campo, valor) {
             unidadesActuales[idx][campo] = valor;
             actualizarStats();
+            marcarCambio();
         }
 
         function agregarUnidad() {
@@ -626,6 +632,7 @@
             actualizarStats();
             prepararCodigoSiguiente();
             mostrarMensaje('Unidad añadida. Pulsa guardar para escribirla en DATOS.', 'success');
+            marcarCambio();
         }
 
         function eliminarUnidad(idx) {
@@ -634,6 +641,7 @@
                 mostrarTablaUnidades();
                 actualizarStats();
                 prepararCodigoSiguiente();
+                marcarCambio();
             }
         }
 
@@ -646,28 +654,72 @@
                     mostrarTablaUnidades();
                     actualizarStats();
                     prepararCodigoSiguiente();
+                    hayCambiosSinGuardar = false;
+                    limpiarTemporizadorAutoguardado();
                     mostrarMensaje(`Unidades guardadas en ${result.fileName}`, 'success');
                     mostrarLoading(false);
+                    return true;
                 } catch (error) {
                     mostrarMensaje('Error al guardar unidades: ' + error.message, 'error');
                     mostrarLoading(false);
+                    return false;
                 }
-                return;
+                return true;
             }
 
             if (!workbook) {
                 mostrarMensaje('No hay archivo cargado.', 'error');
-                return;
+                return false;
             }
 
             try {
                 escribirUnidadesEnWorkbook(workbook, unidadesActuales);
                 XLSX.writeFile(workbook, archivoOriginal.name || 'plantilla313_actualizado.xlsx');
                 mostrarMensaje('Excel actualizado con las unidades en DATOS.', 'success');
+                hayCambiosSinGuardar = false;
+                limpiarTemporizadorAutoguardado();
+                return true;
             } catch (error) {
                 mostrarMensaje('Error al guardar: ' + error.message, 'error');
+                return false;
             }
         }
+
+        function marcarCambio() {
+            hayCambiosSinGuardar = true;
+            limpiarTemporizadorAutoguardado();
+            autoSaveTimeout = setTimeout(() => {
+                guardarCambiosAutomaticamente();
+            }, AUTO_SAVE_DELAY_MS);
+        }
+
+        function limpiarTemporizadorAutoguardado() {
+            if (autoSaveTimeout) {
+                clearTimeout(autoSaveTimeout);
+                autoSaveTimeout = null;
+            }
+        }
+
+        async function guardarCambiosAutomaticamente() {
+            if (!hayCambiosSinGuardar || !isElectronMode) {
+                return true;
+            }
+
+            mostrarMensaje('Autoguardando unidades...', 'info');
+            return guardarExcel();
+        }
+
+        async function guardarCambiosAntesDeCerrar() {
+            if (!hayCambiosSinGuardar || !isElectronMode) {
+                return true;
+            }
+
+            limpiarTemporizadorAutoguardado();
+            mostrarMensaje('Guardando unidades antes de cerrar...', 'info');
+            return guardarExcel();
+        }
+
+        window.guardarCambiosAntesDeCerrar = guardarCambiosAntesDeCerrar;
 
         function escribirUnidadesEnWorkbook(book, unidades) {
             const sheet = book.Sheets.DATOS;

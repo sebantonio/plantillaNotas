@@ -362,6 +362,9 @@
     <script>
         let currentState = null;
         let currentNotes = [];
+        let autoSaveTimeout = null;
+        let hayCambiosSinGuardar = false;
+        const AUTO_SAVE_DELAY_MS = 15000;
 
         const messageBox = document.getElementById("message");
         const unidadSelect = document.getElementById("unidadSelect");
@@ -382,14 +385,21 @@
                 return;
             }
 
-            reloadButton.addEventListener("click", () => loadNotas());
+            reloadButton.addEventListener("click", () => loadNotasConGuardado());
             saveButton.addEventListener("click", saveNotas);
             clearButton.addEventListener("click", clearNotas);
-            unidadSelect.addEventListener("change", () => loadNotas({ keepActivity: false }));
-            tipoSelect.addEventListener("change", () => loadNotas({ keepActivity: false }));
-            actividadSelect.addEventListener("change", () => loadNotas());
+            unidadSelect.addEventListener("change", () => loadNotasConGuardado({ keepActivity: false }));
+            tipoSelect.addEventListener("change", () => loadNotasConGuardado({ keepActivity: false }));
+            actividadSelect.addEventListener("change", () => loadNotasConGuardado());
             loadNotas();
         });
+
+        async function loadNotasConGuardado(options = {}) {
+            const saved = await guardarCambiosAntesDeCerrar();
+            if (saved) {
+                await loadNotas(options);
+            }
+        }
 
         async function loadNotas(options = {}) {
             try {
@@ -411,6 +421,11 @@
 
                 currentState = data;
                 currentNotes = (data.notas || []).map((item) => ({ ...item }));
+                hayCambiosSinGuardar = false;
+                if (autoSaveTimeout) {
+                    clearTimeout(autoSaveTimeout);
+                    autoSaveTimeout = null;
+                }
                 renderControls(data);
                 renderSummary(data);
                 renderTable();
@@ -503,20 +518,23 @@
 
                 row.querySelector("input").addEventListener("input", (event) => {
                     currentNotes[idx].nota = event.target.value;
+                    marcarCambio();
                 });
 
                 notasBody.appendChild(row);
             });
         }
 
-        async function saveNotas() {
+        async function saveNotas(options = {}) {
             if (!currentState) {
-                return;
+                return true;
             }
 
             try {
                 setDisabled(true);
-                showMessage("Guardando notas en el Excel...", "info");
+                if (!options.silent) {
+                    showMessage("Guardando notas en el Excel...", "info");
+                }
                 const data = await window.electronExcel.saveNotasActividad({
                     unidad: currentState.unidad,
                     tipo: currentState.tipo,
@@ -528,9 +546,18 @@
                 renderControls(data);
                 renderSummary(data);
                 renderTable();
-                showMessage("Notas guardadas. Excel recalculara las formulas al abrirse.", "success");
+                hayCambiosSinGuardar = false;
+                if (autoSaveTimeout) {
+                    clearTimeout(autoSaveTimeout);
+                    autoSaveTimeout = null;
+                }
+                if (!options.silent) {
+                    showMessage("Notas guardadas. Excel recalculara las formulas al abrirse.", "success");
+                }
+                return true;
             } catch (error) {
                 showMessage(error.message || "No se pudieron guardar las notas.", "error");
+                return false;
             } finally {
                 setDisabled(false);
             }
@@ -539,7 +566,45 @@
         function clearNotas() {
             currentNotes = currentNotes.map((item) => ({ ...item, nota: "" }));
             renderTable();
+            marcarCambio();
         }
+
+        function marcarCambio() {
+            hayCambiosSinGuardar = true;
+
+            if (autoSaveTimeout) {
+                clearTimeout(autoSaveTimeout);
+            }
+
+            autoSaveTimeout = setTimeout(() => {
+                guardarCambiosAutomaticamente();
+            }, AUTO_SAVE_DELAY_MS);
+        }
+
+        async function guardarCambiosAutomaticamente() {
+            if (!hayCambiosSinGuardar || !window.electronExcel) {
+                return true;
+            }
+
+            showMessage("Autoguardando notas...", "info");
+            return saveNotas({ silent: true });
+        }
+
+        async function guardarCambiosAntesDeCerrar() {
+            if (!hayCambiosSinGuardar || !window.electronExcel) {
+                return true;
+            }
+
+            if (autoSaveTimeout) {
+                clearTimeout(autoSaveTimeout);
+                autoSaveTimeout = null;
+            }
+
+            showMessage("Guardando notas antes de cerrar...", "info");
+            return saveNotas({ silent: true });
+        }
+
+        window.guardarCambiosAntesDeCerrar = guardarCambiosAntesDeCerrar;
 
         function setDisabled(disabled) {
             [unidadSelect, tipoSelect, actividadSelect, saveButton, reloadButton, clearButton].forEach((element) => {

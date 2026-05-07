@@ -817,7 +817,7 @@
         const isElectronMode = Boolean(window.electronExcel);
         let autoSaveTimeout = null;
         let hayChangesSinGuardar = false;
-        const AUTO_SAVE_DELAY_MS = 30000;
+        const AUTO_SAVE_DELAY_MS = 15000;
 
         // ===== VERIFICACIÓN DE LIBRERÍA XLSX =====
         function checkXLSX() {
@@ -1669,6 +1669,10 @@
                 }
 
                 hayChangesSinGuardar = false;
+                if (autoSaveTimeout) {
+                    clearTimeout(autoSaveTimeout);
+                    autoSaveTimeout = null;
+                }
                 mostrarEstadoGuardado('saved', '✅ Guardado');
                 console.log('✅ Cambios guardados automáticamente');
                 return true;

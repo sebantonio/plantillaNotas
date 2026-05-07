@@ -564,6 +564,9 @@
         let archivoOriginal = null;
         let xlsxReady = false;
         const isElectronMode = Boolean(window.electronExcel);
+        let autoSaveTimeout = null;
+        let hayCambiosSinGuardar = false;
+        const AUTO_SAVE_DELAY_MS = 15000;
 
         // ===== VERIFICACIÓN DE LIBRERÍA XLSX =====
         function checkXLSX() {
@@ -650,6 +653,8 @@
 
                 archivoOriginal = { name: result.fileName, path: result.filePath };
                 workbook = null;
+                hayCambiosSinGuardar = false;
+                limpiarTemporizadorAutoguardado();
                 mostrarTablaAlumnos(result.alumnos);
                 actualizarStats(result.alumnos);
                 document.getElementById('uploadArea').style.display = 'none';
@@ -825,6 +830,7 @@
             document.getElementById('alumnoFecha').value = '';
 
             mostrarMensaje(`✅ Alumno "${nombre}" agregado exitosamente`, 'success');
+            marcarCambio();
         }
 
         // ===== ELIMINAR ALUMNO =====
@@ -835,6 +841,7 @@
                 mostrarTablaAlumnos(window.alumnosActuales);
                 actualizarStats(window.alumnosActuales);
                 mostrarMensaje(`✅ Alumno eliminado`, 'success');
+                marcarCambio();
             }
         }
 
@@ -929,7 +936,7 @@
         async function guardarExcelLocal() {
             if (!archivoOriginal) {
                 mostrarMensaje('No hay archivo local seleccionado', 'error');
-                return;
+                return false;
             }
 
             mostrarLoading(true);
@@ -938,13 +945,53 @@
                 const result = await window.electronExcel.saveAlumnos(window.alumnosActuales);
                 mostrarTablaAlumnos(result.alumnos);
                 actualizarStats(result.alumnos);
+                hayCambiosSinGuardar = false;
+                limpiarTemporizadorAutoguardado();
                 mostrarMensaje(`Guardado directamente en: ${result.fileName}`, 'success');
                 mostrarLoading(false);
+                return true;
             } catch (error) {
                 mostrarMensaje('Error al guardar el Excel local: ' + error.message, 'error');
                 mostrarLoading(false);
+                return false;
             }
         }
+
+        function marcarCambio() {
+            hayCambiosSinGuardar = true;
+            limpiarTemporizadorAutoguardado();
+            autoSaveTimeout = setTimeout(() => {
+                guardarCambiosAutomaticamente();
+            }, AUTO_SAVE_DELAY_MS);
+        }
+
+        function limpiarTemporizadorAutoguardado() {
+            if (autoSaveTimeout) {
+                clearTimeout(autoSaveTimeout);
+                autoSaveTimeout = null;
+            }
+        }
+
+        async function guardarCambiosAutomaticamente() {
+            if (!hayCambiosSinGuardar || !isElectronMode) {
+                return true;
+            }
+
+            mostrarMensaje('Autoguardando alumnos...', 'info');
+            return guardarExcelLocal();
+        }
+
+        async function guardarCambiosAntesDeCerrar() {
+            if (!hayCambiosSinGuardar || !isElectronMode) {
+                return true;
+            }
+
+            limpiarTemporizadorAutoguardado();
+            mostrarMensaje('Guardando alumnos antes de cerrar...', 'info');
+            return guardarExcelLocal();
+        }
+
+        window.guardarCambiosAntesDeCerrar = guardarCambiosAntesDeCerrar;
 
         // ===== FUNCIONES AUXILIARES =====
         function mostrarMensaje(texto, tipo) {
