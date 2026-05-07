@@ -387,4 +387,9 @@ Con esta configuración tienes:
 - ✅ Documentación profesional
 - ✅ Estructura escalable para agregar backend
 
-¡Ahora puedes trabajar profesionalmente en tu proyecto FP! 🚀
+¡Ahora puedes trabajar profesionalmente en tu proyecto FP con Tauri v2! 🚀
+
+---
+
+**Nota**: Este proyecto ya está migrado a Tauri v2 desde 2026-05-07.  
+Usa `npm run tauri:dev` para desarrollar y `npm run tauri:build` para compilar.

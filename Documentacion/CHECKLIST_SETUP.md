@@ -306,6 +306,6 @@ Ahora tienes:
 ---
 
 **Tiempo total**: ~60 minutos  
-**Versión**: 0.1.0  
-**Fecha**: 2024  
-**Status**: ✅ LISTO
+**Versión**: 2.0.0  
+**Fecha**: 2026-05-07  
+**Status**: ✅ LISTO (Tauri v2)

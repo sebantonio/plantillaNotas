@@ -300,8 +300,8 @@ code .
 
 ---
 
-**Versión**: 0.1.0  
-**Última actualización**: 2024  
-**Estado**: ✅ Producción  
+**Versión**: 2.0.0  
+**Última actualización**: 2026-05-07  
+**Estado**: ✅ Producción (Tauri v2)  
 **Autor**: Seba (Profesor FP)  
 **Licencia**: MIT

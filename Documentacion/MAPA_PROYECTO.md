@@ -378,7 +378,7 @@ git push origin main
 
 **¡Éxito con tu proyecto!** 🚀
 
-Versión: 0.1.0  
-Último update: 2024  
+Versión: 2.0.0  
+Último update: 2026-05-07  
 Licencia: MIT  
-Autor: Seba
+Autor: Seba (Tauri v2)
