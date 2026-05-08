@@ -121,7 +121,7 @@
 
         .controls {
             display: grid;
-            grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(150px, 220px) auto;
+            grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(150px, 220px) minmax(220px, 1fr) auto auto;
             gap: 14px;
             align-items: end;
             margin-bottom: 22px;
@@ -131,7 +131,8 @@
             border-radius: 8px;
         }
 
-        .field label {
+        .field label,
+        .field-label {
             display: block;
             margin-bottom: 7px;
             color: #4b5563;
@@ -155,6 +156,31 @@
             outline: none;
             border-color: #667eea;
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.13);
+        }
+
+        .check-field {
+            display: flex;
+            align-items: center;
+            min-height: 42px;
+            padding: 9px 10px;
+            border: 1px solid #d7d7d7;
+            border-radius: 6px;
+            background: white;
+        }
+
+        .check-field label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0;
+            color: #374151;
+            cursor: pointer;
+        }
+
+        .check-field input {
+            width: 18px;
+            height: 18px;
+            accent-color: #667eea;
         }
 
         .button-row {
@@ -354,6 +380,19 @@
                     <label for="actividadSelect">Actividad</label>
                     <select id="actividadSelect"></select>
                 </div>
+                <div class="field">
+                    <label for="activityTitleInput">Nombre</label>
+                    <input type="text" id="activityTitleInput" placeholder="Nombre de la actividad" />
+                </div>
+                <div class="field">
+                    <span class="field-label">Incluida</span>
+                    <div class="check-field">
+                        <label for="includedInput">
+                            <input type="checkbox" id="includedInput" />
+                            Cuenta en el total
+                        </label>
+                    </div>
+                </div>
                 <button class="secondary" type="button" id="reloadButton">Recargar</button>
             </section>
 
@@ -381,6 +420,22 @@
                 <div class="summary-item danger">
                     <span>Errores</span>
                     <strong id="invalidCount">0</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Total prácticas</span>
+                    <strong id="totalPracticas">0</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Total memorias</span>
+                    <strong id="totalMemorias">0</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Total otras</span>
+                    <strong id="totalOtros">0</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Total controles</span>
+                    <strong id="totalControles">0</strong>
                 </div>
             </section>
 
@@ -421,6 +476,8 @@
         const unidadSelect = document.getElementById("unidadSelect");
         const tipoSelect = document.getElementById("tipoSelect");
         const actividadSelect = document.getElementById("actividadSelect");
+        const activityTitleInput = document.getElementById("activityTitleInput");
+        const includedInput = document.getElementById("includedInput");
         const notasBody = document.getElementById("notasBody");
         const fileName = document.getElementById("fileName");
         const activityName = document.getElementById("activityName");
@@ -428,6 +485,10 @@
         const gradedCount = document.getElementById("gradedCount");
         const pendingCount = document.getElementById("pendingCount");
         const invalidCount = document.getElementById("invalidCount");
+        const totalPracticas = document.getElementById("totalPracticas");
+        const totalMemorias = document.getElementById("totalMemorias");
+        const totalOtros = document.getElementById("totalOtros");
+        const totalControles = document.getElementById("totalControles");
         const saveButton = document.getElementById("saveButton");
         const reloadButton = document.getElementById("reloadButton");
         const clearButton = document.getElementById("clearButton");
@@ -445,6 +506,26 @@
             unidadSelect.addEventListener("change", () => loadNotasConGuardado({ keepActivity: false }));
             tipoSelect.addEventListener("change", () => loadNotasConGuardado({ keepActivity: false }));
             actividadSelect.addEventListener("change", () => loadNotasConGuardado());
+            activityTitleInput.addEventListener("input", () => {
+                if (currentState) {
+                    currentState.block = {
+                        ...(currentState.block || {}),
+                        nombre: activityTitleInput.value
+                    };
+                    renderSummary(currentState);
+                    marcarCambio();
+                }
+            });
+            includedInput.addEventListener("change", () => {
+                if (currentState) {
+                    currentState.block = {
+                        ...(currentState.block || {}),
+                        incluida: includedInput.checked
+                    };
+                    renderSummary(currentState);
+                    marcarCambio();
+                }
+            });
 
             // Event delegation para inputs de notas (optimización: 1 listener en lugar de N)
             notasBody.addEventListener("input", (event) => {
@@ -516,6 +597,7 @@
                 }
                 renderControls(data);
                 renderSummary(data);
+                renderActivityMeta(data);
                 renderTable();
                 showMessage("Actividad cargada correctamente.", "success");
             } catch (error) {
@@ -546,7 +628,7 @@
                 actividadSelect,
                 data.actividades || [],
                 (item) => item.numero,
-                (item) => `Actividad ${item.numero}`,
+                (item) => item.nombre ? `Actividad ${item.numero} - ${item.nombre}` : `Actividad ${item.numero}`,
                 data.actividad
             );
         }
@@ -576,12 +658,45 @@
         function renderSummary(data) {
             fileName.textContent = data.fileName || "-";
             const type = (data.tipos || []).find((item) => item.key === data.tipo);
-            activityName.textContent = `${data.unidad} - ${type ? type.label : data.tipo} ${data.actividad}`;
+            const blockName = data.block && data.block.nombre ? ` - ${data.block.nombre}` : "";
+            activityName.textContent = `${data.unidad} - ${type ? type.label : data.tipo} ${data.actividad}${blockName}`;
             const stats = getNotesStats();
             studentCount.textContent = stats.total;
             gradedCount.textContent = stats.graded;
             pendingCount.textContent = stats.pending;
             invalidCount.textContent = stats.invalid;
+            renderActivityTotals(data);
+        }
+
+        function renderActivityMeta(data) {
+            activityTitleInput.value = data.block && data.block.nombre ? data.block.nombre : "";
+            includedInput.checked = Boolean(data.block && data.block.incluida);
+        }
+
+        function renderActivityTotals(data) {
+            const byKey = new Map((data.tipos || []).map((item) => [item.key, item]));
+            totalPracticas.textContent = formatIncludedTotal(byKey.get("practicas"), data);
+            totalMemorias.textContent = formatIncludedTotal(byKey.get("memorias"), data);
+            totalOtros.textContent = formatIncludedTotal(byKey.get("otros"), data);
+            totalControles.textContent = formatIncludedTotal(byKey.get("controles"), data);
+        }
+
+        function formatIncludedTotal(type, data) {
+            if (!type) {
+                return "0";
+            }
+
+            let included = type.incluidas || 0;
+            const isCurrentType = data && data.tipo === type.key;
+            const selectedActivity = isCurrentType
+                ? (type.actividades || []).find((item) => Number(item.numero) === Number(data.actividad))
+                : null;
+
+            if (selectedActivity && data.block) {
+                included += Number(Boolean(data.block.incluida)) - Number(Boolean(selectedActivity.incluida));
+            }
+
+            return `${included}/${type.total || 0}`;
         }
 
         function renderTable() {
@@ -641,12 +756,15 @@
                     unidad: currentState.unidad,
                     tipo: currentState.tipo,
                     actividad: currentState.actividad,
+                    nombreActividad: activityTitleInput.value.trim(),
+                    incluida: includedInput.checked,
                     notas: currentNotes
                 });
                 currentState = data;
                 currentNotes = (data.notas || []).map((item) => ({ ...item }));
                 renderControls(data);
                 renderSummary(data);
+                renderActivityMeta(data);
                 renderTable();
                 hayCambiosSinGuardar = false;
                 if (autoSaveTimeout) {
@@ -801,7 +919,7 @@
         window.guardarCambiosAntesDeCerrar = guardarCambiosAntesDeCerrar;
 
         function setDisabled(disabled) {
-            [unidadSelect, tipoSelect, actividadSelect, saveButton, reloadButton, clearButton].forEach((element) => {
+            [unidadSelect, tipoSelect, actividadSelect, activityTitleInput, includedInput, saveButton, reloadButton, clearButton].forEach((element) => {
                 element.disabled = disabled;
             });
         }

@@ -247,7 +247,11 @@ ipcMain.handle('excel:saveNotasActividad', async (_event, payload) => {
     payload.unidad,
     payload.tipo,
     Number(payload.actividad) || 1,
-    payload.notas
+    payload.notas,
+    {
+      nombreActividad: payload.nombreActividad,
+      incluida: Boolean(payload.incluida)
+    }
   );
   return loadNotasActividadFromSelectedFile(
     payload.unidad,
@@ -519,6 +523,16 @@ function loadNotasActividadFromSelectedFile(unidad = 'U1', tipo = 'practicas', a
   const blocks = findActivityBlocks(rows, selectedType.key);
   const selectedBlock = blocks.find((block) => Number(block.numero) === Number(actividad)) || blocks[0] || null;
   const notas = selectedBlock ? extractActivityNotes(rows, selectedBlock) : [];
+  const tipos = ACTIVITY_TYPES.map((item) => {
+    const typeBlocks = findActivityBlocks(rows, item.key).map(formatActivityBlock);
+    return {
+      key: item.key,
+      label: item.label,
+      actividades: typeBlocks,
+      incluidas: typeBlocks.filter((block) => block.incluida).length,
+      total: typeBlocks.length
+    };
+  });
 
   return {
     filePath: selectedExcelPath,
@@ -527,18 +541,14 @@ function loadNotasActividadFromSelectedFile(unidad = 'U1', tipo = 'practicas', a
     tipo: selectedType.key,
     actividad: selectedBlock ? selectedBlock.numero : Number(actividad) || 1,
     unidades,
-    tipos: ACTIVITY_TYPES.map((item) => ({
-      key: item.key,
-      label: item.label,
-      actividades: findActivityBlocks(rows, item.key).map(formatActivityBlock)
-    })),
+    tipos,
     actividades: blocks.map(formatActivityBlock),
     notas,
     block: selectedBlock ? formatActivityBlock(selectedBlock) : null
   };
 }
 
-async function saveNotasActividadToFile(filePath, unidad, tipo, actividad, notas) {
+async function saveNotasActividadToFile(filePath, unidad, tipo, actividad, notas, metadata = {}) {
   const workbook = XLSX.readFile(filePath, { cellDates: true, sheets: [unidad] });
 
   if (!workbook.SheetNames.includes(unidad)) {
@@ -556,6 +566,12 @@ async function saveNotasActividadToFile(filePath, unidad, tipo, actividad, notas
   await editWorkbookSheetsXml(filePath, {
     [unidad]: (sheetXml) => {
       let xml = sheetXml;
+
+      if (block.nameValueCol !== -1) {
+        xml = setXmlCell(xml, block.numberRow, block.nameValueCol, metadata.nombreActividad || null, 'text');
+      }
+
+      xml = setXmlCell(xml, block.includedRow, block.includedCol, metadata.incluida ? 'X' : null, 'text');
 
       notas.forEach((item) => {
         const rowIdx = Number(item.rowIdx);
@@ -1053,10 +1069,17 @@ function findActivityBlocks(rows, tipoKey) {
       numero: activityNumber,
       titleRow: rowIdx,
       numberRow: rowIdx + 1,
+      includedRow: rowIdx + 2,
       headerRow: rowIdx + 3,
       firstStudentRow: rowIdx + 4,
       nameCol,
-      noteCol
+      noteCol,
+      numberCol: activityType.baseCol + 1,
+      nameLabelCol: findActivityHeaderCol(rows[rowIdx + 1] || [], activityType.baseCol, 'NOMBRE'),
+      nameValueCol: resolveActivityNameValueCol(rows[rowIdx + 1] || [], activityType.baseCol),
+      includedCol: activityType.baseCol + 1,
+      nombre: getActivityName(rows[rowIdx + 1] || [], activityType.baseCol),
+      incluida: isActivityIncluded(rows[rowIdx + 2] && rows[rowIdx + 2][activityType.baseCol + 1])
     });
   }
 
@@ -1073,6 +1096,25 @@ function findActivityHeaderCol(row, startCol, expectedText) {
   }
 
   return -1;
+}
+
+function resolveActivityNameValueCol(row, startCol) {
+  const labelCol = findActivityHeaderCol(row, startCol, 'NOMBRE');
+
+  if (labelCol !== -1) {
+    return labelCol + 1;
+  }
+
+  return startCol + 3;
+}
+
+function getActivityName(row, startCol) {
+  const valueCol = resolveActivityNameValueCol(row, startCol);
+  return String(row[valueCol] || '').trim();
+}
+
+function isActivityIncluded(value) {
+  return normalizePlainText(value) === 'X';
 }
 
 function extractActivityNotes(rows, block) {
@@ -1100,7 +1142,9 @@ function extractActivityNotes(rows, block) {
 function formatActivityBlock(block) {
   return {
     numero: block.numero,
-    label: `${block.tipoLabel} ${block.numero}`,
+    nombre: block.nombre || '',
+    incluida: Boolean(block.incluida),
+    label: block.nombre ? `${block.tipoLabel} ${block.numero} - ${block.nombre}` : `${block.tipoLabel} ${block.numero}`,
     firstStudentRow: block.firstStudentRow,
     noteCol: block.noteCol
   };
@@ -1388,6 +1432,7 @@ async function editWorkbookSheetsXml(filePath, sheetEdits) {
   });
 
   fs.writeFileSync(filePath, output);
+  invalidateWorkbookCache();
 }
 
 async function findWorksheetPath(zip, sheetName) {
@@ -1853,7 +1898,11 @@ async function commandSaveNotasActividad(payload) {
     payload.unidad,
     payload.tipo,
     Number(payload.actividad) || 1,
-    payload.notas
+    payload.notas,
+    {
+      nombreActividad: payload.nombreActividad,
+      incluida: Boolean(payload.incluida)
+    }
   );
   return loadNotasActividadFromSelectedFile(payload.unidad, payload.tipo, Number(payload.actividad) || 1);
 }
