@@ -237,7 +237,8 @@ ipcMain.handle('excel:getNotasActividad', async (_event, payload = {}) => {
   return loadNotasActividadFromSelectedFile(
     payload.unidad || 'U1',
     payload.tipo || 'practicas',
-    Number(payload.actividad) || 1
+    Number(payload.actividad) || 1,
+    { maxAlumnos: Number(payload.maxAlumnos) || null }
   );
 });
 
@@ -543,7 +544,7 @@ function loadRraaCriteriosFromSelectedFile() {
   };
 }
 
-function loadNotasActividadFromSelectedFile(unidad = 'U1', tipo = 'practicas', actividad = 1) {
+function loadNotasActividadFromSelectedFile(unidad = 'U1', tipo = 'practicas', actividad = 1, options = {}) {
   const workbook = XLSX.readFile(selectedExcelPath, { cellDates: true, cellFormula: false, cellHTML: false, cellNF: false });
   const unidades = listUnitSheets(workbook);
   const selectedUnidad = unidades.find((item) => item.codigo === unidad)?.codigo || unidades[0]?.codigo || unidad;
@@ -557,7 +558,7 @@ function loadNotasActividadFromSelectedFile(unidad = 'U1', tipo = 'practicas', a
   const selectedType = getActivityType(tipo);
   const blocks = findActivityBlocks(rows, selectedType.key);
   const selectedBlock = blocks.find((block) => Number(block.numero) === Number(actividad)) || blocks[0] || null;
-  const notas = selectedBlock ? extractActivityNotes(rows, selectedBlock) : [];
+  const notas = selectedBlock ? extractActivityNotes(rows, selectedBlock, options) : [];
   const tipos = ACTIVITY_TYPES.map((item) => {
     const typeBlocks = findActivityBlocks(rows, item.key).map(formatActivityBlock);
     return {
@@ -1228,8 +1229,9 @@ function isActivityIncluded(value) {
   return normalizePlainText(value) === 'X';
 }
 
-function extractActivityNotes(rows, block) {
+function extractActivityNotes(rows, block, options = {}) {
   const notes = [];
+  const maxAlumnos = Number(options.maxAlumnos) || 0;
 
   for (let rowIdx = block.firstStudentRow; rowIdx < rows.length; rowIdx += 1) {
     const row = rows[rowIdx] || [];
@@ -1245,6 +1247,10 @@ function extractActivityNotes(rows, block) {
       nombre: String(nombre).trim(),
       nota: formatValueForUi(row[block.noteCol])
     });
+
+    if (maxAlumnos > 0 && notes.length >= maxAlumnos) {
+      break;
+    }
   }
 
   return notes;
@@ -2547,7 +2553,12 @@ async function commandGetNotasActividad(payload = {}) {
   }
 
   return selectedExcelPath
-    ? loadNotasActividadFromSelectedFile(payload.unidad || 'U1', payload.tipo || 'practicas', Number(payload.actividad) || 1)
+    ? loadNotasActividadFromSelectedFile(
+        payload.unidad || 'U1',
+        payload.tipo || 'practicas',
+        Number(payload.actividad) || 1,
+        { maxAlumnos: Number(payload.maxAlumnos) || null }
+      )
     : null;
 }
 
