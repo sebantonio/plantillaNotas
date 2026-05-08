@@ -1507,6 +1507,7 @@ async function editWorkbookSheetsXml(filePath, sheetEdits) {
 
     const originalXml = await sheetFile.async('string');
     const updatedXml = editSheetXml(originalXml);
+    assertWorksheetXmlLooksSafe(updatedXml, sheetName);
     zip.file(sheetPath, updatedXml);
   }
 
@@ -1521,6 +1522,28 @@ async function editWorkbookSheetsXml(filePath, sheetEdits) {
 
   fs.writeFileSync(filePath, output);
   invalidateWorkbookCache();
+}
+
+function assertWorksheetXmlLooksSafe(sheetXml, sheetName) {
+  const rowRegex = /<row\b[^>]*(?:\/>|>[\s\S]*?<\/row>)/g;
+  let rowMatch;
+
+  while ((rowMatch = rowRegex.exec(sheetXml)) !== null) {
+    const rowXml = rowMatch[0];
+    const rowNumber = getXmlAttribute(rowXml, 'r');
+
+    if (!rowNumber) {
+      continue;
+    }
+
+    const openCells = (rowXml.match(/<c\b/g) || []).length;
+    const closedCells = (rowXml.match(/<\/c>/g) || []).length;
+    const selfClosedCells = (rowXml.match(/<c\b[^>]*\/>/g) || []).length;
+    if (openCells !== closedCells + selfClosedCells) {
+      throw new Error(`El XML generado para ${sheetName}, fila ${rowNumber}, no es seguro. No se ha guardado el Excel.`);
+    }
+
+  }
 }
 
 async function findWorksheetPath(zip, sheetName) {
@@ -1698,6 +1721,7 @@ function copyActivityBlockXml(sheetXml, options) {
   }
 
   xml = copyActivityMergesXml(xml, options);
+  xml = normalizeCellRefsInRowsXml(xml, options.targetStart, options.sourceEnd + rowDelta);
   xml = updateWorksheetDimensionRows(xml, options.targetStart + 1, options.sourceEnd + rowDelta + 1);
   xml = setXmlCell(xml, options.targetStart + 1, options.numberCol, options.newNumber, 'number');
   xml = setXmlCell(xml, options.targetStart + 1, options.nameValueCol, options.nombreActividad || null, 'text');
@@ -1721,6 +1745,23 @@ function copyActivityBlockXml(sheetXml, options) {
   return xml;
 }
 
+function normalizeCellRefsInRowsXml(sheetXml, startRowIdx, endRowIdx) {
+  const startRowNumber = startRowIdx + 1;
+  const endRowNumber = endRowIdx + 1;
+
+  return sheetXml.replace(/<row\b[^>]*\br="(\d+)"[^>]*(?:\/>|>[\s\S]*?<\/row>)/g, (rowXml, rowNumberText) => {
+    const rowNumber = Number(rowNumberText);
+
+    if (rowNumber < startRowNumber || rowNumber > endRowNumber) {
+      return rowXml;
+    }
+
+    return rowXml.replace(/(<c\b[^>]*\br=")([A-Z]+)\d+(")/g, (_match, prefix, colName, suffix) => (
+      `${prefix}${colName}${rowNumber}${suffix}`
+    ));
+  });
+}
+
 function clearActivityStudentInputCellsXml(sheetXml, options) {
   if (!options.rowCount) {
     return sheetXml;
@@ -1736,7 +1777,7 @@ function clearActivityStudentInputCellsXml(sheetXml, options) {
       return rowXml;
     }
 
-    return rowXml.replace(/<c\b(?:(?!<c\b)[\s\S])*?(?:<\/c>|\/>)/g, (cellXml) => {
+    return rowXml.replace(/<c\b[^>]*(?:\/>|>[\s\S]*?<\/c>)/g, (cellXml) => {
       const cellRef = getXmlAttribute(cellXml, 'r');
 
       if (!cellRef) {
@@ -1758,7 +1799,7 @@ function getXmlRow(sheetXml, rowNumber) {
 
 function cloneXmlCellsForActivity(rowXml, options) {
   const cells = [];
-  const cellRegex = /<c\b(?:(?!<c\b)[\s\S])*?(?:<\/c>|\/>)/g;
+  const cellRegex = /<c\b[^>]*(?:\/>|>[\s\S]*?<\/c>)/g;
   let cellMatch;
 
   while ((cellMatch = cellRegex.exec(rowXml)) !== null) {
@@ -1781,11 +1822,35 @@ function cloneXmlCellsForActivity(rowXml, options) {
 }
 
 function cloneXmlCell(cellXml, targetRowNumber, rowDelta, sourceStartRowNumber, sourceEndRowNumber) {
-  let next = cellXml.replace(/\br="([A-Z]+)\d+"/, (_match, colName) => `r="${colName}${targetRowNumber}"`);
+  const cellRef = getXmlAttribute(cellXml, 'r');
+  const colName = cellRef ? cellRef.replace(/\d+$/, '') : '';
+  let next = colName
+    ? cellXml.replace(`r="${cellRef}"`, `r="${colName}${targetRowNumber}"`)
+    : cellXml;
   next = next.replace(/(<f\b[^>]*>)([\s\S]*?)(<\/f>)/g, (_match, open, formula, close) => (
-    `${open}${shiftFormulaRows(formula, rowDelta, sourceStartRowNumber, sourceEndRowNumber)}${close}`
+    `${shiftFormulaRefAttribute(open, rowDelta, sourceStartRowNumber, sourceEndRowNumber)}${shiftFormulaRows(formula, rowDelta, sourceStartRowNumber, sourceEndRowNumber)}${close}`
   ));
   return next;
+}
+
+function shiftFormulaRefAttribute(tag, rowDelta, sourceStartRowNumber, sourceEndRowNumber) {
+  const ref = getXmlAttribute(tag, 'ref');
+
+  if (!ref) {
+    return tag;
+  }
+
+  const shiftedRef = ref.replace(/(\$?[A-Z]{1,3})(\$?)(\d+)/g, (match, col, absoluteRow, rowNumberText) => {
+    const rowNumber = Number(rowNumberText);
+
+    if (absoluteRow || rowNumber < sourceStartRowNumber || rowNumber > sourceEndRowNumber) {
+      return match;
+    }
+
+    return `${col}${rowNumber + rowDelta}`;
+  });
+
+  return setXmlAttribute(tag, 'ref', shiftedRef);
 }
 
 function shiftFormulaRows(formula, rowDelta, sourceStartRowNumber, sourceEndRowNumber) {
@@ -1817,7 +1882,7 @@ function upsertXmlRowCells(sheetXml, sourceRowXml, targetRowNumber, typeStartCol
 }
 
 function removeXmlCellsInColRange(rowXml, startCol, endCol) {
-  return rowXml.replace(/<c\b(?:(?!<c\b)[\s\S])*?(?:<\/c>|\/>)/g, (cellXml) => {
+  return rowXml.replace(/<c\b[^>]*(?:\/>|>[\s\S]*?<\/c>)/g, (cellXml) => {
     const cellRef = getXmlAttribute(cellXml, 'r');
 
     if (!cellRef) {
@@ -2022,7 +2087,7 @@ function insertXmlRow(sheetXml, rowNumber) {
 }
 
 function insertXmlCellInRow(rowXml, cellXml, colIdx) {
-  const cells = [...rowXml.matchAll(/<c\b(?:(?!<c\b)[\s\S])*?(?:<\/c>|\/>)/g)];
+  const cells = [...rowXml.matchAll(/<c\b[^>]*(?:\/>|>[\s\S]*?<\/c>)/g)];
 
   for (const cell of cells) {
     const cellRef = getXmlAttribute(cell[0], 'r');
