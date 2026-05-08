@@ -9,6 +9,7 @@ const files = [
   'gestor-rraa-criterios.html',
   'gestor-unidades.html',
   'gestor-notas.html',
+  'incluir-actividad.html',
   'visor-notas.html',
   'informes.html',
   'app-bridge.js'
