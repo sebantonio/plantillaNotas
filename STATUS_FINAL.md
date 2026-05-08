@@ -2,23 +2,25 @@
 
 ## ✅ Implementación Completada
 
-### 1. **Fix Crítico: Copia de Actividades (Commit 4a43267)**
+### 1. **Fix Crítico: Copia de Actividades (Commit fd51553)**
 
-**Problema Original**: Al agregar una nueva actividad, se copiaban todas las filas múltiples veces.
+**Problema Original**: 
+- Insertar filas vacías desplazaba todo (incluidas fórmulas de promedio al final)
+- Se copiaban todas las filas de la hoja cuando solo necesitaba el rango de la actividad
 
-**Solución Implementada**: Enfoque de dos pasos que refleja exactamente el proceso manual:
+**Solución Correcta (Commit fd51553)**: Copiar SOLO el rango de la actividad sin insertar filas
 
-```
-Paso 1: Insertar filas vacías (asignar espacio)
-Paso 2: Copiar el bloque anterior una sola vez (llenar con contenido)
-```
+**Cómo funciona**:
+1. Para cada fila del bloque anterior (sourceStart → sourceEnd)
+2. Clonar SOLO las celdas en el rango de columnas de esa actividad (typeStartCol → typeEndCol)
+3. Pegar directamente en la fila destino (sin insertar filas vacías)
+4. Ajustar referencias y fórmulas con rowDelta
 
 **Beneficios**:
-- ✅ Solo copia el bloque anterior (no todas las filas)
-- ✅ Copia una sola vez (no múltiples)
-- ✅ Preserva nombres de actividades
-- ✅ Preserva formato (colores, estilos)
-- ✅ Preserva fórmulas (con ajustes de fila automáticos)
+- ✅ No desplaza filas al final (promedios quedan intactos)
+- ✅ Solo copia el rango específico de la actividad
+- ✅ Copia una sola vez de forma limpia
+- ✅ Preserva nombres, formato, fórmulas
 - ✅ Sin errores de corrupción Excel
 
 ### 2. **Mejoras de Interfaz (index.html)**
@@ -144,8 +146,9 @@ Después de compilar, verifica lo siguiente:
 
 | Commit | Descripción | Status |
 |--------|-------------|--------|
-| 4a43267 | Fix: copiar solo bloque sin duplicar | ✅ |
-| ff35561 | Fix: copiar fila completa preservando | ✅ |
+| fd51553 | Fix: copiar SOLO rango sin insertar filas | ✅ |
+| 4a43267 | Fix: copiar solo bloque sin duplicar | ✅ REEMPLAZADO |
+| ff35561 | Fix: copiar fila completa preservando | ✅ REEMPLAZADO |
 | 5fc08a5 | Docs: actualizar menu recientes | ✅ |
 | f80c4d5 | Feat: mejorar menu recientes | ✅ |
 | 3f9e8b6 | Fix: remover limpieza de celdas | ✅ |
@@ -160,19 +163,25 @@ Después de compilar, verifica lo siguiente:
 
 ### copyActivityBlockXml() - La Función Central
 - **Ubicación**: main.js:1703
-- **Responsabilidad**: Orquestra la copia de bloque
+- **Responsabilidad**: Orquesta la copia del rango de actividad
 - **Lógica**:
-  1. Calcula rowDelta = targetStart - sourceStart
-  2. Inserta blockSize filas vacías
-  3. Copia cada fila del bloque original
-  4. Ajusta referencias y fórmulas
-  5. Normaliza cell references
-  6. Limpia celdas de entrada estudiante
+  1. Para cada fila del bloque (sourceStart → sourceEnd)
+  2. Clona SOLO celdas en rango de actividad (typeStartCol → typeEndCol)
+  3. Inserta/actualiza celdas en fila destino (sin insertar filas vacías)
+  4. Copia merged cells en el rango
+  5. Normaliza referencias de celda
+  6. Actualiza número y nombre de actividad
+  7. Limpia celdas de entrada estudiante
 
-### cloneFullXmlRow() - Copia Completa
-- **Ubicación**: main.js:1906
-- **Responsabilidad**: Clonar fila preservando TODO
-- **Incluye**: Nombres, formato, fórmulas
+### cloneActivityRangeCells() - Copia Selectiva
+- **Ubicación**: main.js:1911
+- **Responsabilidad**: Clonar solo celdas en el rango de la actividad
+- **Incluye**: Ajuste de fila, fórmulas con rowDelta
+
+### upsertActivityRowCells() - Inserta/Actualiza
+- **Ubicación**: main.js:1942
+- **Responsabilidad**: Insertar o actualizar fila con celdas clonadas
+- **Crea nueva fila si no existe, actualiza si existe**
 
 ### Flujo de Datos
 ```
