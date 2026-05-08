@@ -1708,18 +1708,16 @@ function copyActivityBlockXml(sheetXml, options) {
       continue;
     }
 
-    const isStudentRow = rowIdx >= options.sourceStart + options.firstStudentRowOffset;
     const clonedCells = cloneXmlCellsForActivity(sourceRow, {
       targetRowNumber,
       rowDelta,
       sourceStartRowNumber: options.sourceStart + 1,
       sourceEndRowNumber: options.sourceEnd + 1,
       typeStartCol: options.typeStartCol,
-      typeEndCol: isStudentRow ? options.typeEndCol : Number.MAX_SAFE_INTEGER,
-      isHeaderRow: !isStudentRow
+      typeEndCol: options.typeEndCol
     });
 
-    xml = upsertXmlRowCells(xml, sourceRow, targetRowNumber, options.typeStartCol, isStudentRow ? options.typeEndCol : Number.MAX_SAFE_INTEGER, clonedCells);
+    xml = upsertXmlRowCells(xml, sourceRow, targetRowNumber, options.typeStartCol, options.typeEndCol, clonedCells);
   }
 
   xml = copyActivityMergesXml(xml, options);
@@ -1813,9 +1811,7 @@ function cloneXmlCellsForActivity(rowXml, options) {
 
     const colIdx = columnIndex(cellRef.replace(/\d+$/, ''));
 
-    // En filas de cabecera, copiar TODAS las celdas (para incluir headers de otros tipos)
-    // En filas de estudiantes, copiar solo dentro del rango de tipo
-    if (!options.isHeaderRow && (colIdx < options.typeStartCol || colIdx > options.typeEndCol)) {
+    if (colIdx < options.typeStartCol || colIdx > options.typeEndCol) {
       continue;
     }
 
