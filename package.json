@@ -22,6 +22,7 @@
       "gestor-notas.html",
       "incluir-actividad.html",
       "visor-notas.html",
+      "visor-actividades.html",
       "informes.html",
       "app-bridge.js",
       "tauri-node-backend.js",

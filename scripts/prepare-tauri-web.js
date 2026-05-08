@@ -11,6 +11,7 @@ const files = [
   'gestor-notas.html',
   'incluir-actividad.html',
   'visor-notas.html',
+  'visor-actividades.html',
   'informes.html',
   'app-bridge.js'
 ];

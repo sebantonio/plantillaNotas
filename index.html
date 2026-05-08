@@ -395,6 +395,61 @@
             font-style: italic;
         }
 
+        .side-action {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding-top: 2px;
+        }
+
+        .side-action-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px;
+            color: var(--text);
+            text-decoration: none;
+            background: #ffffff;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+
+        .side-action-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(37, 99, 235, 0.45);
+            box-shadow: 0 12px 26px rgba(37, 99, 235, 0.12);
+        }
+
+        .side-action-icon {
+            flex: 0 0 auto;
+            width: 46px;
+            height: 46px;
+            display: grid;
+            place-items: center;
+            color: var(--primary-dark);
+            background: rgba(15, 118, 110, 0.1);
+            border-radius: 10px;
+            font-size: 1.55rem;
+            font-weight: 800;
+        }
+
+        .side-action-card strong,
+        .side-action-card span {
+            display: block;
+        }
+
+        .side-action-card strong {
+            margin-bottom: 4px;
+            font-size: 1rem;
+        }
+
+        .side-action-card span {
+            color: var(--muted);
+            font-size: 0.86rem;
+            line-height: 1.35;
+        }
+
         .online-link {
             display: flex;
             align-items: center;
@@ -611,8 +666,19 @@
                     >
                         <div class="action-icon">👁️</div>
                         <div>
-                            <strong>Ver notas</strong>
+                            <strong>Ver notas RRAA y CCEE</strong>
                             <span>Consulta notas finales, RRAA y criterios por alumno.</span>
+                        </div>
+                    </a>
+
+                    <a
+                        class="action-card"
+                        href="visor-actividades.html"
+                    >
+                        <div class="action-icon">📋</div>
+                        <div>
+                            <strong>Ver notas actividades</strong>
+                            <span>Consulta practicas, memorias, otras actividades y controles por unidad.</span>
                         </div>
                     </a>
 
@@ -627,16 +693,6 @@
                         </div>
                     </a>
 
-                    <a
-                        class="action-card"
-                        href="informes.html"
-                    >
-                        <div class="action-icon">📊</div>
-                        <div>
-                            <strong>Informes</strong>
-                            <span>Genera informes, gráficos de evolución y vistas imprimibles.</span>
-                        </div>
-                    </a>
                 </div>
             </div>
 
@@ -662,6 +718,17 @@
                         <button class="recent-clear-btn" type="button" id="clearAllRecentBtn" title="Limpiar historial" style="display:none">🗑️</button>
                     </div>
                     <div class="recent-list" id="recentFilesList"></div>
+                </div>
+
+                <div class="side-action">
+                    <div class="section-kicker">Informes</div>
+                    <a class="side-action-card" href="informes.html">
+                        <div class="side-action-icon">📊</div>
+                        <div>
+                            <strong>Informes</strong>
+                            <span>Genera informes, gráficos de evolución y vistas imprimibles.</span>
+                        </div>
+                    </a>
                 </div>
             </aside>
         </section>
