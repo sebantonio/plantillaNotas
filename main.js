@@ -1713,16 +1713,9 @@ function copyActivityBlockXml(sheetXml, options) {
       continue;
     }
 
-    const clonedCells = cloneXmlCellsForActivity(sourceRow, {
-      targetRowNumber,
-      rowDelta,
-      sourceStartRowNumber: options.sourceStart + 1,
-      sourceEndRowNumber: options.sourceEnd + 1,
-      typeStartCol: options.typeStartCol,
-      typeEndCol: options.typeEndCol
-    });
-
-    xml = upsertXmlRowCells(xml, sourceRow, targetRowNumber, options.typeStartCol, options.typeEndCol, clonedCells);
+    // Copiar la fila completa y ajustar el número
+    const clonedFullRow = cloneFullXmlRow(sourceRow, targetRowNumber, options);
+    xml = upsertFullXmlRow(xml, clonedFullRow, targetRowNumber);
   }
 
   xml = copyActivityMergesXml(xml, options);
@@ -1898,6 +1891,52 @@ function removeXmlCellsInColRange(rowXml, startCol, endCol) {
     const colIdx = columnIndex(cellRef.replace(/\d+$/, ''));
     return colIdx >= startCol && colIdx <= endCol ? '' : cellXml;
   });
+}
+
+function cloneFullXmlRow(sourceRowXml, targetRowNumber, options) {
+  // Reemplazar número de fila
+  let clonedXml = sourceRowXml.replace(/\br="(\d+)"/, `r="${targetRowNumber}"`);
+
+  // Actualizar referencias de celdas
+  clonedXml = clonedXml.replace(/<c\b[^>]*\br="([A-Z]+)(\d+)"[^>]*>/g, (match, col, rowNum) => {
+    return match.replace(`r="${col}${rowNum}"`, `r="${col}${targetRowNumber}"`);
+  });
+
+  // Ajustar fórmulas
+  const rowDelta = options.targetStart - options.sourceStart;
+  clonedXml = clonedXml.replace(/(<f\b[^>]*>)([\s\S]*?)(<\/f>)/g, (_match, open, formula, close) => (
+    `${shiftFormulaRefAttribute(open, rowDelta, options.sourceStart + 1, options.sourceEnd + 1)}${shiftFormulaRows(formula, rowDelta, options.sourceStart + 1, options.sourceEnd + 1)}${close}`
+  ));
+
+  return clonedXml;
+}
+
+function upsertFullXmlRow(sheetXml, newRowXml, targetRowNumber) {
+  const rowRegex = new RegExp(`<row\\b[^>]*\\br="${targetRowNumber}"[^>]*>[\\s\\S]*?<\\/row>`);
+  const existingRow = sheetXml.match(rowRegex);
+
+  if (existingRow) {
+    return sheetXml.replace(existingRow[0], newRowXml);
+  }
+
+  // Si no existe, insertarla en el lugar correcto
+  const rowRegexAll = /<row\b[^>]*\br="(\d+)"[^>]*>[\s\S]*?<\/row>/g;
+  let rowMatch;
+  let lastMatch = null;
+
+  while ((rowMatch = rowRegexAll.exec(sheetXml)) !== null) {
+    if (Number(rowMatch[1]) > targetRowNumber) {
+      return sheetXml.replace(rowMatch[0], `${newRowXml}${rowMatch[0]}`);
+    }
+    lastMatch = rowMatch[0];
+  }
+
+  // Si no hay fila con número mayor, insertar antes de </sheetData>
+  if (sheetXml.includes('</sheetData>')) {
+    return sheetXml.replace('</sheetData>', `${newRowXml}</sheetData>`);
+  }
+
+  throw new Error('La hoja no tiene una estructura sheetData válida.');
 }
 
 function buildClonedXmlRow(sourceRowXml, targetRowNumber, clonedCells) {
