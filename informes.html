@@ -203,6 +203,10 @@
             margin-bottom: 18px;
         }
 
+        .chart-section {
+            margin-bottom: 18px;
+        }
+
         .card {
             padding: 18px;
         }
@@ -334,6 +338,29 @@
             line-height: 1.45;
         }
 
+        .criteria-summary strong {
+            color: var(--text);
+        }
+
+        .criteria-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .criterion-tag {
+            display: inline-flex;
+            align-items: center;
+            max-width: 100%;
+            padding: 6px 9px;
+            border: 1px solid rgba(220, 38, 38, 0.22);
+            border-radius: 8px;
+            color: #991b1b;
+            background: #fff1f2;
+            font-weight: 800;
+        }
+
         .summary-table {
             width: 100%;
             border-collapse: collapse;
@@ -413,13 +440,14 @@
 </head>
 <body>
     <main class="shell">
-        <nav class="page-nav" aria-label="Navegacion">
+        <nav class="page-nav" aria-label="Navegación">
             <div class="nav-group">
-                <button class="nav-button" type="button" onclick="window.history.back()">Atras</button>
+                <button class="nav-button" type="button" onclick="window.history.back()">Atrás</button>
                 <a class="nav-link" href="index.html">Inicio</a>
                 <a class="nav-link" href="visor-notas.html">Ver notas</a>
             </div>
             <div class="toolbar-actions">
+                <button type="button" id="finalButton">Mostrar final</button>
                 <button class="primary" type="button" id="printButton">Imprimir informe</button>
             </div>
         </nav>
@@ -432,7 +460,7 @@
             </div>
         </header>
 
-        <div id="message" class="message"></div>
+        <div id="message" class="message" role="status" aria-live="polite"></div>
 
         <section class="toolbar panel" aria-label="Filtros de informe">
             <div>
@@ -440,7 +468,7 @@
                 <select id="studentSelect"></select>
             </div>
             <div>
-                <label for="evaluationFocus">Evaluacion destacada</label>
+                <label for="evaluationFocus">Evaluación destacada</label>
                 <select id="evaluationFocus"></select>
             </div>
             <button type="button" id="reloadButton">Recargar datos</button>
@@ -465,21 +493,20 @@
             </div>
         </section>
 
-        <section class="report-grid">
+        <section class="chart-section">
             <article class="card panel">
-                <h2>Evolucion del alumno</h2>
-                <svg id="evolutionChart" class="evolution-chart" viewBox="0 0 720 260" role="img" aria-label="Grafico de evolucion"></svg>
+                <h2>Evolución del alumno</h2>
+                <svg id="evolutionChart" class="evolution-chart" viewBox="0 0 720 260" role="img" aria-label="Gráfico de evolución"></svg>
             </article>
-
         </section>
 
         <section class="report-grid">
             <article class="card panel">
-                <h2>Resumen por evaluacion</h2>
+                <h2>Resumen por evaluación</h2>
                 <table class="summary-table">
                     <thead>
                         <tr>
-                            <th>Evaluacion</th>
+                            <th>Evaluación</th>
                             <th>Alumno</th>
                             <th>Media grupo</th>
                             <th>Aprobados</th>
@@ -519,20 +546,21 @@
         const studentSelect = document.getElementById("studentSelect");
         const evaluationFocus = document.getElementById("evaluationFocus");
         const reloadButton = document.getElementById("reloadButton");
+        const finalButton = document.getElementById("finalButton");
         const printButton = document.getElementById("printButton");
         const studentName = document.getElementById("studentName");
         const finalGrade = document.getElementById("finalGrade");
         const averageGrade = document.getElementById("averageGrade");
         const passedEvaluations = document.getElementById("passedEvaluations");
         const evolutionChart = document.getElementById("evolutionChart");
-const summaryBody = document.getElementById("summaryBody");
+        const summaryBody = document.getElementById("summaryBody");
         const focusTitle = document.getElementById("focusTitle");
         const focusDetail = document.getElementById("focusDetail");
         const evaluationReports = document.getElementById("evaluationReports");
 
         document.addEventListener("DOMContentLoaded", () => {
             if (!window.electronExcel) {
-                showMessage("Abre esta pantalla desde la aplicacion local de Electron.", "error");
+                showMessage("Abre esta pantalla desde la aplicación local de Electron.", "error");
                 return;
             }
 
@@ -542,6 +570,7 @@ const summaryBody = document.getElementById("summaryBody");
             evaluationFocus.value = "final";
 
             reloadButton.addEventListener("click", loadReports);
+            finalButton.addEventListener("click", showFinalEvaluation);
             printButton.addEventListener("click", () => window.print());
             studentSelect.addEventListener("change", () => {
                 state.selectedStudent = studentSelect.value;
@@ -550,14 +579,10 @@ const summaryBody = document.getElementById("summaryBody");
             evaluationFocus.addEventListener("change", async () => {
                 const evalValue = evaluationFocus.value;
                 if (!_evaluationsCache.has(evalValue)) {
-                    showMessage("Cargando evaluacion...", "info");
+                    showMessage("Cargando evaluación...", "info");
                     await loadEvaluation(evalValue);
-                    const newStudents = buildStudentList(state.evaluations);
-                    if (newStudents.length !== state.students.length) {
-                        state.students = newStudents;
-                        renderStudentSelect();
-                    }
-                    showMessage("", "");
+                    syncStudentsFromEvaluations();
+                    clearMessage();
                 }
                 renderReport();
             });
@@ -580,14 +605,14 @@ const summaryBody = document.getElementById("summaryBody");
             try {
                 _evaluationsCache.clear();
                 const initialEval = evaluationFocus.value || "final";
-                showMessage(`Leyendo evaluacion ${initialEval === "final" ? "Final" : initialEval + " EVA"}...`, "info");
+                showMessage(`Leyendo evaluación ${initialEval === "final" ? "Final" : initialEval + " EVA"}...`, "info");
 
                 await loadEvaluation(initialEval);
 
                 state.students = buildStudentList(state.evaluations);
 
                 if (!state.students.length) {
-                    showMessage("No se encontraron alumnos en las hojas de evaluacion.", "error");
+                    showMessage("No se encontraron alumnos en las hojas de evaluación.", "error");
                     renderEmpty();
                     return;
                 }
@@ -598,10 +623,45 @@ const summaryBody = document.getElementById("summaryBody");
 
                 renderStudentSelect();
                 renderReport();
-                showMessage("Informe cargado. Cambia la evaluacion para ver las demas.", "success");
+                showMessage("Informe cargado. Cambia la evaluación para ver las demás.", "success");
             } catch (error) {
                 showMessage(error.message || "No se pudieron cargar los informes.", "error");
             }
+        }
+
+        async function showFinalEvaluation() {
+            try {
+                evaluationFocus.value = "final";
+
+                if (!_evaluationsCache.has("final")) {
+                    showMessage("Cargando evaluación final...", "info");
+                    await loadEvaluation("final");
+                    syncStudentsFromEvaluations();
+                }
+
+                renderReport();
+                showMessage("Evaluación final mostrada.", "success");
+            } catch (error) {
+                showMessage(error.message || "No se pudo cargar la evaluación final.", "error");
+            }
+        }
+
+        function syncStudentsFromEvaluations() {
+            const newStudents = buildStudentList(state.evaluations);
+
+            if (!areArraysEqual(newStudents, state.students)) {
+                state.students = newStudents;
+
+                if (!state.selectedStudent || !state.students.includes(state.selectedStudent)) {
+                    state.selectedStudent = state.students[0] || "";
+                }
+
+                renderStudentSelect();
+            }
+        }
+
+        function areArraysEqual(first, second) {
+            return first.length === second.length && first.every((value, index) => value === second[index]);
         }
 
         function buildStudentList(evaluations) {
@@ -628,7 +688,7 @@ const summaryBody = document.getElementById("summaryBody");
             studentSelect.value = state.selectedStudent;
         }
 
-        // Sistema de batching para reducir reflows (optimización 3.1)
+        // Sistema de batching para reducir reflows.
         let renderScheduled = false;
         const renderQueue = [];
 
@@ -660,7 +720,7 @@ const summaryBody = document.getElementById("summaryBody");
             averageGrade.textContent = average === null ? "-" : formatGrade(average);
             passedEvaluations.textContent = `${passed}/${numericGrades.length}`;
 
-            // Batching: agregar renders a queue en lugar de ejecutar inmediatamente
+            renderQueue.length = 0;
             scheduleRender(() => renderEvolutionChart(selected));
             scheduleRender(() => renderSummaryTable(selected));
             scheduleRender(() => renderFocusDetail(selected));
@@ -681,7 +741,7 @@ const summaryBody = document.getElementById("summaryBody");
             return (data.alumnos || []).find((alumno) => alumno.nombre === student) || null;
         }
 
-        // Cache para getEvaluationStats (optimización 3.2 - memoization)
+        // Cache para getEvaluationStats.
         const evalStatsCache = new WeakMap();
 
         function getEvaluationStats(data) {
@@ -711,7 +771,7 @@ const summaryBody = document.getElementById("summaryBody");
             const chartSeries = series.filter((item) => typeof item.alumno.final === "number");
 
             if (!chartSeries.length) {
-                evolutionChart.innerHTML = chartEmptyText("Sin notas numericas para dibujar la evolucion.");
+                evolutionChart.innerHTML = chartEmptyText("Sin notas numéricas para dibujar la evolución.");
                 return;
             }
 
@@ -740,6 +800,8 @@ const summaryBody = document.getElementById("summaryBody");
             )).join("");
 
             evolutionChart.innerHTML = `
+                <title>Evolución de ${escapeHtml(state.selectedStudent || "alumno")}</title>
+                <desc>Gráfico de notas de 0 a 10 para las evaluaciones cargadas.</desc>
                 ${grid}
                 <line x1="${padding.left}" y1="${padding.top}" x2="${padding.left}" y2="${height - padding.bottom}" stroke="#cbd5e1" />
                 <line x1="${padding.left}" y1="${height - padding.bottom}" x2="${width - padding.right}" y2="${height - padding.bottom}" stroke="#cbd5e1" />
@@ -753,7 +815,7 @@ const summaryBody = document.getElementById("summaryBody");
             return `<text x="50%" y="50%" text-anchor="middle" fill="#61708a" font-size="16">${escapeHtml(text)}</text>`;
         }
 
-function renderSummaryTable(series) {
+        function renderSummaryTable(series) {
             summaryBody.innerHTML = series.map((item) => `
                 <tr>
                     <td>${escapeHtml(item.label)}</td>
@@ -787,7 +849,7 @@ function renderSummaryTable(series) {
                         </div>
                     `).join("")}
                 </div>
-                <p class="criteria-summary">${buildCriteriaSummary(focus.alumno)}</p>
+                <div class="criteria-summary">${buildCriteriaSummary(focus.alumno)}</div>
             `;
         }
 
@@ -806,7 +868,7 @@ function renderSummaryTable(series) {
                             </div>
                         `).join("")}
                     </div>
-                    <p class="criteria-summary">${buildCriteriaSummary(item.alumno)}</p>
+                    <div class="criteria-summary">${buildCriteriaSummary(item.alumno)}</div>
                 </article>
             `).join("");
         }
@@ -816,7 +878,22 @@ function renderSummaryTable(series) {
             const numeric = criterios.filter((criterion) => typeof criterion.nota === "number");
             const passed = numeric.filter((criterion) => criterion.nota >= 5).length;
             const pending = criterios.length - numeric.length;
-            return `${passed} criterios aprobados de ${numeric.length} con nota numerica. ${pending} criterios sin nota numerica.`;
+            const failed = numeric.filter((criterion) => criterion.nota < 5);
+            const pendingText = pending === 1
+                ? "1 criterio sin nota numérica"
+                : `${pending} criterios sin nota numérica`;
+            const summary = `<strong>${passed}</strong> criterios aprobados de <strong>${numeric.length}</strong> con nota numérica. ${pendingText}.`;
+
+            if (!failed.length) {
+                return `${summary} No hay criterios con nota inferior a 5.`;
+            }
+
+            const failedTags = failed.map((criterion) => {
+                const code = criterion.codigo || criterion.raLabel || "Criterio";
+                return `<span class="criterion-tag">${escapeHtml(code)}: ${formatGrade(criterion.nota, criterion.display)}</span>`;
+            }).join("");
+
+            return `${summary}<div class="criteria-list" aria-label="Criterios no superados">${failedTags}</div>`;
         }
 
         function gradeBadge(value, display) {
@@ -859,8 +936,18 @@ function renderSummaryTable(series) {
         }
 
         function showMessage(text, type) {
+            if (!text) {
+                clearMessage();
+                return;
+            }
+
             messageBox.textContent = text;
             messageBox.className = `message visible ${type || ""}`;
+        }
+
+        function clearMessage() {
+            messageBox.textContent = "";
+            messageBox.className = "message";
         }
 
         function escapeHtml(value) {
