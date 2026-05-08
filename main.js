@@ -260,6 +260,24 @@ ipcMain.handle('excel:saveNotasActividad', async (_event, payload) => {
   );
 });
 
+ipcMain.handle('excel:addActividad', async (_event, payload = {}) => {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  if (!selectedExcelPath) {
+    throw new Error('No hay ningun archivo Excel seleccionado.');
+  }
+
+  return addActividadToFile(
+    selectedExcelPath,
+    payload.unidad || 'U1',
+    payload.tipo || 'practicas',
+    payload.nombreActividad || '',
+    payload.incluida !== false
+  );
+});
+
 ipcMain.handle('excel:getNotasEvaluacion', async (_event, payload = {}) => {
   if (!selectedExcelPath) {
     selectedExcelPath = findDefaultExcelPath();
@@ -591,6 +609,54 @@ async function saveNotasActividadToFile(filePath, unidad, tipo, actividad, notas
       return xml;
     }
   });
+}
+
+async function addActividadToFile(filePath, unidad, tipo, nombreActividad, incluida = true) {
+  const workbook = XLSX.readFile(filePath, { cellDates: true, sheets: [unidad] });
+
+  if (!workbook.SheetNames.includes(unidad)) {
+    throw new Error(`El archivo no tiene la hoja "${unidad}".`);
+  }
+
+  const sheet = workbook.Sheets[unidad];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+  const selectedType = getActivityType(tipo);
+  const blocks = findActivityBlocks(rows, selectedType.key).sort((a, b) => Number(a.numero) - Number(b.numero));
+  const previousBlock = blocks[blocks.length - 1];
+
+  if (!previousBlock) {
+    throw new Error(`No se encontro ninguna actividad previa de ${selectedType.label} en ${unidad}.`);
+  }
+
+  const stride = getActivityBlockStride(blocks);
+  const newNumber = Number(previousBlock.numero) + 1;
+  const sourceStart = previousBlock.titleRow;
+  const sourceEnd = previousBlock.titleRow + stride - 1;
+  const targetStart = previousBlock.titleRow + stride;
+  const typeEndCol = getActivityTypeEndCol(selectedType.key);
+  const notesToClear = extractActivityNotes(rows, previousBlock).length;
+
+  await editWorkbookSheetsXml(filePath, {
+    [unidad]: (sheetXml) => copyActivityBlockXml(sheetXml, {
+      sourceStart,
+      sourceEnd,
+      targetStart,
+      typeStartCol: selectedType.baseCol,
+      typeEndCol,
+      numberCol: previousBlock.numberCol,
+      nameValueCol: previousBlock.nameValueCol,
+      includedRowOffset: previousBlock.includedRow - previousBlock.titleRow,
+      includedCol: previousBlock.includedCol,
+      firstStudentRowOffset: previousBlock.firstStudentRow - previousBlock.titleRow,
+      noteCol: previousBlock.noteCol,
+      notesToClear,
+      newNumber,
+      nombreActividad: String(nombreActividad || '').trim(),
+      incluida
+    })
+  });
+
+  return loadNotasActividadFromSelectedFile(unidad, selectedType.key, newNumber);
 }
 
 function loadNotasEvaluacionFromSelectedFile(evaluacion = '1') {
@@ -1041,6 +1107,28 @@ function listUnitSheets(workbook) {
 
 function getActivityType(tipo) {
   return ACTIVITY_TYPES.find((item) => item.key === tipo) || ACTIVITY_TYPES[0];
+}
+
+function getActivityTypeEndCol(tipoKey) {
+  const currentIdx = ACTIVITY_TYPES.findIndex((item) => item.key === tipoKey);
+  const current = ACTIVITY_TYPES[currentIdx] || ACTIVITY_TYPES[0];
+  const next = ACTIVITY_TYPES[currentIdx + 1];
+
+  return next ? next.baseCol - 1 : current.baseCol + 110;
+}
+
+function getActivityBlockStride(blocks) {
+  if (blocks.length >= 2) {
+    const last = blocks[blocks.length - 1];
+    const previous = blocks[blocks.length - 2];
+    const stride = last.titleRow - previous.titleRow;
+
+    if (stride > 0) {
+      return stride;
+    }
+  }
+
+  return 44;
 }
 
 function findActivityBlocks(rows, tipoKey) {
@@ -1584,6 +1672,314 @@ function syncEvaluationUnitBlocksXml(sheetXml, rows, unidades) {
   return xml;
 }
 
+function copyActivityBlockXml(sheetXml, options) {
+  const rowDelta = options.targetStart - options.sourceStart;
+  let xml = sheetXml;
+
+  for (let rowIdx = options.sourceStart; rowIdx <= options.sourceEnd; rowIdx += 1) {
+    const sourceRowNumber = rowIdx + 1;
+    const targetRowNumber = rowIdx + rowDelta + 1;
+    const sourceRow = getXmlRow(xml, sourceRowNumber);
+
+    if (!sourceRow) {
+      continue;
+    }
+
+    const clonedCells = cloneXmlCellsForActivity(sourceRow, {
+      targetRowNumber,
+      rowDelta,
+      sourceStartRowNumber: options.sourceStart + 1,
+      sourceEndRowNumber: options.sourceEnd + 1,
+      typeStartCol: options.typeStartCol,
+      typeEndCol: options.typeEndCol
+    });
+
+    xml = upsertXmlRowCells(xml, sourceRow, targetRowNumber, options.typeStartCol, options.typeEndCol, clonedCells);
+  }
+
+  xml = copyActivityMergesXml(xml, options);
+  xml = updateWorksheetDimensionRows(xml, options.targetStart + 1, options.sourceEnd + rowDelta + 1);
+  xml = setXmlCell(xml, options.targetStart + 1, options.numberCol, options.newNumber, 'number');
+  xml = setXmlCell(xml, options.targetStart + 1, options.nameValueCol, options.nombreActividad || null, 'text');
+  xml = setXmlCell(
+    xml,
+    options.targetStart + options.includedRowOffset,
+    options.includedCol,
+    options.incluida ? 'X' : null,
+    'text'
+  );
+
+  xml = clearActivityStudentInputCellsXml(xml, {
+    startRow: options.targetStart + options.firstStudentRowOffset,
+    rowCount: options.notesToClear,
+    ranges: [
+      { startCol: options.typeStartCol + 2, endCol: options.typeStartCol + 3 },
+      { startCol: options.noteCol, endCol: options.typeEndCol }
+    ]
+  });
+
+  return xml;
+}
+
+function clearActivityStudentInputCellsXml(sheetXml, options) {
+  if (!options.rowCount) {
+    return sheetXml;
+  }
+
+  const startRowNumber = options.startRow + 1;
+  const endRowNumber = options.startRow + options.rowCount;
+
+  return sheetXml.replace(/<row\b[^>]*\br="(\d+)"[^>]*>[\s\S]*?<\/row>/g, (rowXml, rowNumberText) => {
+    const rowNumber = Number(rowNumberText);
+
+    if (rowNumber < startRowNumber || rowNumber > endRowNumber) {
+      return rowXml;
+    }
+
+    return rowXml.replace(/<c\b(?:(?!<c\b)[\s\S])*?(?:<\/c>|\/>)/g, (cellXml) => {
+      const cellRef = getXmlAttribute(cellXml, 'r');
+
+      if (!cellRef) {
+        return cellXml;
+      }
+
+      const colIdx = columnIndex(cellRef.replace(/\d+$/, ''));
+      const shouldClear = options.ranges.some((range) => colIdx >= range.startCol && colIdx <= range.endCol);
+      return shouldClear ? '' : cellXml;
+    });
+  });
+}
+
+function getXmlRow(sheetXml, rowNumber) {
+  const rowRegex = new RegExp(`<row\\b[^>]*\\br="${rowNumber}"[^>]*>[\\s\\S]*?<\\/row>`);
+  const match = sheetXml.match(rowRegex);
+  return match ? match[0] : null;
+}
+
+function cloneXmlCellsForActivity(rowXml, options) {
+  const cells = [];
+  const cellRegex = /<c\b(?:(?!<c\b)[\s\S])*?(?:<\/c>|\/>)/g;
+  let cellMatch;
+
+  while ((cellMatch = cellRegex.exec(rowXml)) !== null) {
+    const cellRef = getXmlAttribute(cellMatch[0], 'r');
+
+    if (!cellRef) {
+      continue;
+    }
+
+    const colIdx = columnIndex(cellRef.replace(/\d+$/, ''));
+
+    if (colIdx < options.typeStartCol || colIdx > options.typeEndCol) {
+      continue;
+    }
+
+    cells.push(cloneXmlCell(cellMatch[0], options.targetRowNumber, options.rowDelta, options.sourceStartRowNumber, options.sourceEndRowNumber));
+  }
+
+  return cells;
+}
+
+function cloneXmlCell(cellXml, targetRowNumber, rowDelta, sourceStartRowNumber, sourceEndRowNumber) {
+  let next = cellXml.replace(/\br="([A-Z]+)\d+"/, (_match, colName) => `r="${colName}${targetRowNumber}"`);
+  next = next.replace(/(<f\b[^>]*>)([\s\S]*?)(<\/f>)/g, (_match, open, formula, close) => (
+    `${open}${shiftFormulaRows(formula, rowDelta, sourceStartRowNumber, sourceEndRowNumber)}${close}`
+  ));
+  return next;
+}
+
+function shiftFormulaRows(formula, rowDelta, sourceStartRowNumber, sourceEndRowNumber) {
+  return String(formula || '').replace(/(\$?[A-Z]{1,3})(\$?)(\d+)/g, (match, col, absoluteRow, rowNumberText) => {
+    const rowNumber = Number(rowNumberText);
+
+    if (absoluteRow || rowNumber < sourceStartRowNumber || rowNumber > sourceEndRowNumber) {
+      return match;
+    }
+
+    return `${col}${rowNumber + rowDelta}`;
+  });
+}
+
+function upsertXmlRowCells(sheetXml, sourceRowXml, targetRowNumber, typeStartCol, typeEndCol, clonedCells) {
+  const targetRow = getXmlRow(sheetXml, targetRowNumber);
+
+  if (targetRow) {
+    const cleanedRow = removeXmlCellsInColRange(targetRow, typeStartCol, typeEndCol);
+    const updatedRow = clonedCells.reduce((rowXml, cellXml) => {
+      const colName = getXmlAttribute(cellXml, 'r').replace(/\d+$/, '');
+      return insertXmlCellInRow(rowXml, cellXml, columnIndex(colName));
+    }, cleanedRow);
+    return sheetXml.replace(targetRow, updatedRow);
+  }
+
+  const newRow = buildClonedXmlRow(sourceRowXml, targetRowNumber, clonedCells);
+  return insertXmlRowXml(sheetXml, newRow);
+}
+
+function removeXmlCellsInColRange(rowXml, startCol, endCol) {
+  return rowXml.replace(/<c\b(?:(?!<c\b)[\s\S])*?(?:<\/c>|\/>)/g, (cellXml) => {
+    const cellRef = getXmlAttribute(cellXml, 'r');
+
+    if (!cellRef) {
+      return cellXml;
+    }
+
+    const colIdx = columnIndex(cellRef.replace(/\d+$/, ''));
+    return colIdx >= startCol && colIdx <= endCol ? '' : cellXml;
+  });
+}
+
+function buildClonedXmlRow(sourceRowXml, targetRowNumber, clonedCells) {
+  const openTagMatch = sourceRowXml.match(/^<row\b[^>]*>/);
+  const openTag = openTagMatch
+    ? setXmlAttribute(openTagMatch[0], 'r', targetRowNumber)
+    : `<row r="${targetRowNumber}">`;
+  return `${openTag}${clonedCells.join('')}</row>`;
+}
+
+function insertXmlRowXml(sheetXml, rowXml) {
+  const targetRowNumber = Number(getXmlAttribute(rowXml, 'r'));
+  const rowRegex = /<row\b[^>]*\br="(\d+)"[^>]*>[\s\S]*?<\/row>/g;
+  let rowMatch;
+
+  while ((rowMatch = rowRegex.exec(sheetXml)) !== null) {
+    if (Number(rowMatch[1]) > targetRowNumber) {
+      return sheetXml.replace(rowMatch[0], `${rowXml}${rowMatch[0]}`);
+    }
+  }
+
+  if (!sheetXml.includes('</sheetData>')) {
+    throw new Error('La hoja no tiene una estructura sheetData valida.');
+  }
+
+  return sheetXml.replace('</sheetData>', `${rowXml}</sheetData>`);
+}
+
+function copyActivityMergesXml(sheetXml, options) {
+  const rowDelta = options.targetStart - options.sourceStart;
+  const sourceStartRowNumber = options.sourceStart + 1;
+  const sourceEndRowNumber = options.sourceEnd + 1;
+  const targetStartRowNumber = options.targetStart + 1;
+  const targetEndRowNumber = options.sourceEnd + rowDelta + 1;
+  const mergeRefs = [];
+  const copiedRefs = [];
+  const mergeRegex = /<mergeCell\b[^>]*\bref="([^"]+)"[^>]*\/>/g;
+  let mergeMatch;
+
+  while ((mergeMatch = mergeRegex.exec(sheetXml)) !== null) {
+    const ref = mergeMatch[1];
+    const range = decodeXmlRange(ref);
+
+    if (!range) {
+      mergeRefs.push(ref);
+      continue;
+    }
+
+    const isTargetOverlap = rangesOverlap(range, {
+      startRow: targetStartRowNumber,
+      endRow: targetEndRowNumber,
+      startCol: options.typeStartCol,
+      endCol: options.typeEndCol
+    });
+
+    if (!isTargetOverlap) {
+      mergeRefs.push(ref);
+    }
+
+    const isSourceInside = (
+      range.startRow >= sourceStartRowNumber &&
+      range.endRow <= sourceEndRowNumber &&
+      range.startCol >= options.typeStartCol &&
+      range.endCol <= options.typeEndCol
+    );
+
+    if (isSourceInside) {
+      copiedRefs.push(shiftXmlRangeRows(range, rowDelta));
+    }
+  }
+
+  return replaceMergeCellsXml(sheetXml, [...mergeRefs, ...copiedRefs]);
+}
+
+function decodeXmlRange(ref) {
+  const parts = String(ref || '').split(':');
+  const start = decodeXmlCellRef(parts[0]);
+  const end = decodeXmlCellRef(parts[1] || parts[0]);
+
+  if (!start || !end) {
+    return null;
+  }
+
+  return {
+    startRow: Math.min(start.row, end.row),
+    endRow: Math.max(start.row, end.row),
+    startCol: Math.min(start.col, end.col),
+    endCol: Math.max(start.col, end.col)
+  };
+}
+
+function decodeXmlCellRef(ref) {
+  const match = String(ref || '').match(/^([A-Z]+)(\d+)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    colName: match[1],
+    col: columnIndex(match[1]),
+    row: Number(match[2])
+  };
+}
+
+function rangesOverlap(first, second) {
+  return !(
+    first.endRow < second.startRow ||
+    first.startRow > second.endRow ||
+    first.endCol < second.startCol ||
+    first.startCol > second.endCol
+  );
+}
+
+function shiftXmlRangeRows(range, rowDelta) {
+  const startRef = `${columnName(range.startCol)}${range.startRow + rowDelta}`;
+  const endRef = `${columnName(range.endCol)}${range.endRow + rowDelta}`;
+  return startRef === endRef ? startRef : `${startRef}:${endRef}`;
+}
+
+function replaceMergeCellsXml(sheetXml, refs) {
+  const uniqueRefs = Array.from(new Set(refs));
+  const mergeXml = uniqueRefs.length
+    ? `<mergeCells count="${uniqueRefs.length}">${uniqueRefs.map((ref) => `<mergeCell ref="${escapeXml(ref)}"/>`).join('')}</mergeCells>`
+    : '';
+
+  if (/<mergeCells\b[\s\S]*?<\/mergeCells>/.test(sheetXml)) {
+    return sheetXml.replace(/<mergeCells\b[\s\S]*?<\/mergeCells>/, mergeXml);
+  }
+
+  if (!mergeXml) {
+    return sheetXml;
+  }
+
+  return sheetXml.replace('</sheetData>', `</sheetData>${mergeXml}`);
+}
+
+function updateWorksheetDimensionRows(sheetXml, targetStartRowNumber, targetEndRowNumber) {
+  return sheetXml.replace(/<dimension\b[^>]*\bref="([^"]+)"[^>]*\/>/, (tag, ref) => {
+    const parts = String(ref).split(':');
+    const startRef = decodeXmlCellRef(parts[0]);
+    const endRef = decodeXmlCellRef(parts[1] || parts[0]);
+
+    if (!startRef || !endRef) {
+      return tag;
+    }
+
+    const nextEndRow = Math.max(endRef.row, targetStartRowNumber, targetEndRowNumber);
+    const nextRef = `${parts[0]}:${endRef.colName}${nextEndRow}`;
+    return setXmlAttribute(tag, 'ref', nextRef);
+  });
+}
+
 function setXmlCell(sheetXml, rowIdx, colIdx, value, valueType = 'text') {
   const rowNumber = rowIdx + 1;
   const cellRef = `${columnName(colIdx)}${rowNumber}`;
@@ -1626,10 +2022,12 @@ function insertXmlRow(sheetXml, rowNumber) {
 }
 
 function insertXmlCellInRow(rowXml, cellXml, colIdx) {
-  const cells = [...rowXml.matchAll(/<c\b[^>]*\br="([A-Z]+)\d+"[^>]*(?:>[\s\S]*?<\/c>|\s*\/>)/g)];
+  const cells = [...rowXml.matchAll(/<c\b(?:(?!<c\b)[\s\S])*?(?:<\/c>|\/>)/g)];
 
   for (const cell of cells) {
-    if (columnIndex(cell[1]) > colIdx) {
+    const cellRef = getXmlAttribute(cell[0], 'r');
+
+    if (cellRef && columnIndex(cellRef.replace(/\d+$/, '')) > colIdx) {
       return rowXml.replace(cell[0], `${cellXml}${cell[0]}`);
     }
   }
@@ -1907,6 +2305,24 @@ async function commandSaveNotasActividad(payload) {
   return loadNotasActividadFromSelectedFile(payload.unidad, payload.tipo, Number(payload.actividad) || 1);
 }
 
+async function commandAddActividad(payload = {}) {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  if (!selectedExcelPath) {
+    throw new Error('No hay ningun archivo Excel seleccionado.');
+  }
+
+  return addActividadToFile(
+    selectedExcelPath,
+    payload.unidad || 'U1',
+    payload.tipo || 'practicas',
+    payload.nombreActividad || '',
+    payload.incluida !== false
+  );
+}
+
 async function commandGetNotasEvaluacion(payload = {}) {
   if (!selectedExcelPath) {
     selectedExcelPath = findDefaultExcelPath();
@@ -1964,6 +2380,7 @@ module.exports = {
     saveRraaCriterios: commandSaveRraaCriterios,
     getNotasActividad: commandGetNotasActividad,
     saveNotasActividad: commandSaveNotasActividad,
+    addActividad: commandAddActividad,
     getNotasEvaluacion: commandGetNotasEvaluacion,
     getNotasEvaluacionAlumno: commandGetNotasEvaluacionAlumno,
     getAlumnosInformes: commandGetAlumnosInformes,

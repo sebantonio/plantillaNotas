@@ -117,6 +117,11 @@ fn excel_save_notas_actividad(payload: Value) -> Result<Value, String> {
 }
 
 #[tauri::command]
+fn excel_add_actividad(payload: Value) -> Result<Value, String> {
+    call_node_backend("addActividad", payload)
+}
+
+#[tauri::command]
 fn excel_get_notas_evaluacion(payload: Value) -> Result<Value, String> {
     call_node_backend("getNotasEvaluacion", payload)
 }
@@ -154,6 +159,7 @@ fn main() {
             excel_save_rraa_criterios,
             excel_get_notas_actividad,
             excel_save_notas_actividad,
+            excel_add_actividad,
             excel_get_notas_evaluacion,
             excel_get_notas_evaluacion_alumno,
             excel_get_alumnos_informes,

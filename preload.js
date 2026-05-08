@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('electronExcel', {
   },
   getNotasActividad: (payload) => ipcRenderer.invoke('excel:getNotasActividad', payload),
   saveNotasActividad: (payload) => ipcRenderer.invoke('excel:saveNotasActividad', payload),
+  addActividad: (payload) => ipcRenderer.invoke('excel:addActividad', payload),
   getNotasEvaluacion: (payload) => ipcRenderer.invoke('excel:getNotasEvaluacion', payload),
   setSelectedFile: (filePath) => ipcRenderer.invoke('excel:setSelectedFile', filePath),
   openExternal: (url) => ipcRenderer.invoke('app:openExternal', url)

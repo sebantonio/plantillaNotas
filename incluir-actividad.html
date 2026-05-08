@@ -130,6 +130,10 @@
             border-radius: 8px;
         }
 
+        .add-panel {
+            margin-top: 18px;
+        }
+
         .field.full {
             grid-column: 1 / -1;
         }
@@ -313,6 +317,32 @@
                 </div>
             </section>
 
+            <section class="form-panel add-panel" aria-label="Añadir nueva actividad">
+                <div class="field full">
+                    <span class="field-label">Añadir nueva actividad</span>
+                </div>
+
+                <div class="field">
+                    <label for="newTipoSelect">Tipo de actividad</label>
+                    <select id="newTipoSelect"></select>
+                </div>
+
+                <div class="field">
+                    <span class="field-label">Incluida</span>
+                    <div class="check-field">
+                        <label for="newIncludedInput">
+                            <input type="checkbox" id="newIncludedInput" checked />
+                            Marcar con X
+                        </label>
+                    </div>
+                </div>
+
+                <div class="field full">
+                    <label for="newActivityNameInput">Nombre de la nueva actividad</label>
+                    <input type="text" id="newActivityNameInput" placeholder="Ej.: Montaje de equipos" />
+                </div>
+            </section>
+
             <section class="summary" aria-label="Resumen">
                 <div class="summary-item">
                     <span>Archivo</span>
@@ -326,11 +356,16 @@
                     <span>Incluidas del tipo</span>
                     <strong id="includedCount">0/0</strong>
                 </div>
+                <div class="summary-item">
+                    <span>Siguiente actividad</span>
+                    <strong id="nextActivity">-</strong>
+                </div>
             </section>
 
             <div class="actions">
                 <button class="secondary" type="button" id="reloadButton">Recargar</button>
                 <button type="button" id="saveButton">Crear actividad</button>
+                <button type="button" id="addButton">Añadir nueva</button>
             </div>
         </main>
     </div>
@@ -345,11 +380,16 @@
         const ordenSelect = document.getElementById("ordenSelect");
         const activityNameInput = document.getElementById("activityNameInput");
         const includedInput = document.getElementById("includedInput");
+        const newTipoSelect = document.getElementById("newTipoSelect");
+        const newActivityNameInput = document.getElementById("newActivityNameInput");
+        const newIncludedInput = document.getElementById("newIncludedInput");
         const fileName = document.getElementById("fileName");
         const selectedBlock = document.getElementById("selectedBlock");
         const includedCount = document.getElementById("includedCount");
+        const nextActivity = document.getElementById("nextActivity");
         const reloadButton = document.getElementById("reloadButton");
         const saveButton = document.getElementById("saveButton");
+        const addButton = document.getElementById("addButton");
 
         document.addEventListener("DOMContentLoaded", () => {
             if (!window.electronExcel) {
@@ -365,6 +405,10 @@
             ordenSelect.addEventListener("change", () => loadActivity());
             includedInput.addEventListener("change", renderSummary);
             activityNameInput.addEventListener("input", renderSummary);
+            newTipoSelect.addEventListener("change", renderSummary);
+            newActivityNameInput.addEventListener("input", renderSummary);
+            newIncludedInput.addEventListener("change", renderSummary);
+            addButton.addEventListener("click", addNewActivity);
 
             loadActivity();
         });
@@ -403,6 +447,7 @@
         function renderControls(data) {
             fillSelect(unidadSelect, data.unidades || [], (item) => item.codigo, (item) => item.label || item.codigo, data.unidad);
             fillSelect(tipoSelect, data.tipos || [], (item) => item.key, (item) => item.label, data.tipo);
+            fillSelect(newTipoSelect, data.tipos || [], (item) => item.key, (item) => item.label, newTipoSelect.value || data.tipo);
             fillSelect(
                 ordenSelect,
                 data.actividades || [],
@@ -429,10 +474,14 @@
                 : Number(includedInput.checked);
             const includedTotal = Math.max(0, (type?.incluidas || 0) + includedDelta);
             const nameSuffix = activityNameInput.value.trim() ? ` - ${activityNameInput.value.trim()}` : "";
+            const newType = (currentState.tipos || []).find((item) => item.key === newTipoSelect.value) || type;
+            const newTypeLabel = newType ? newType.label : newTipoSelect.value;
+            const newNameSuffix = newActivityNameInput.value.trim() ? ` - ${newActivityNameInput.value.trim()}` : "";
 
             fileName.textContent = currentState.fileName || "-";
             selectedBlock.textContent = `${currentState.unidad} - ${type ? type.label : currentState.tipo} ${currentState.actividad}${nameSuffix}`;
             includedCount.textContent = `${includedTotal}/${type?.total || 0}`;
+            nextActivity.textContent = `${currentState.unidad} - ${newTypeLabel} ${(newType?.total || 0) + 1}${newNameSuffix}`;
         }
 
         async function saveActivity() {
@@ -473,6 +522,44 @@
             }
         }
 
+        async function addNewActivity() {
+            if (!currentState) {
+                return;
+            }
+
+            const nombreActividad = newActivityNameInput.value.trim();
+            if (!nombreActividad) {
+                showMessage("Escribe el nombre de la nueva actividad.", "error");
+                newActivityNameInput.focus();
+                return;
+            }
+
+            try {
+                setDisabled(true);
+                showMessage("Copiando el bloque anterior y creando la nueva actividad...", "info");
+
+                const data = await window.electronExcel.addActividad({
+                    unidad: unidadSelect.value || currentState.unidad,
+                    tipo: newTipoSelect.value || currentState.tipo,
+                    nombreActividad,
+                    incluida: newIncludedInput.checked
+                });
+
+                currentState = data;
+                currentNotes = (data.notas || []).map((item) => ({ ...item }));
+                newActivityNameInput.value = "";
+                newIncludedInput.checked = true;
+                renderControls(data);
+                renderForm(data);
+                renderSummary();
+                showMessage("Nueva actividad añadida correctamente.", "success");
+            } catch (error) {
+                showMessage(error.message || "No se pudo añadir la actividad.", "error");
+            } finally {
+                setDisabled(false);
+            }
+        }
+
         function fillSelect(select, items, valueGetter, labelGetter, selectedValue) {
             select.innerHTML = "";
 
@@ -496,7 +583,7 @@
         }
 
         function setDisabled(disabled) {
-            [unidadSelect, tipoSelect, ordenSelect, activityNameInput, includedInput, reloadButton, saveButton].forEach((element) => {
+            [unidadSelect, tipoSelect, ordenSelect, activityNameInput, includedInput, newTipoSelect, newActivityNameInput, newIncludedInput, reloadButton, saveButton, addButton].forEach((element) => {
                 element.disabled = disabled;
             });
         }
