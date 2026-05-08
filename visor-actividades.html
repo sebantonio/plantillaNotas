@@ -592,7 +592,7 @@
 
         function getVisibleStudents() {
             const query = normalize(searchInput.value);
-            return (state.alumnos || []).filter((alumno) => !query || normalize(alumno.nombre).includes(query));
+            return (state.notas || []).filter((alumno) => !query || normalize(alumno.nombre).includes(query));
         }
 
         function getUnitLabel(codigo) {
