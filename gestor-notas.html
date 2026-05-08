@@ -609,10 +609,32 @@
                 renderActivityMeta(data);
                 renderTable();
                 showMessage("Actividad cargada correctamente.", "success");
+
+                // Precargar el resto de actividades en segundo plano
+                if (data.actividades && data.actividades.length > 1) {
+                    preloadOtherActividades(unidad, tipo, actividad, data.actividades);
+                }
             } catch (error) {
                 showMessage(error.message || "No se pudieron cargar las notas.", "error");
             } finally {
                 setDisabled(false);
+            }
+        }
+
+        async function preloadOtherActividades(unidad, tipo, actividadActual, actividades) {
+            for (const act of actividades) {
+                if (act.numero === actividadActual) continue;
+                const key = `${unidad}:${tipo}:${act.numero}`;
+                if (_notasCache.has(key)) continue;
+
+                try {
+                    const data = await window.electronExcel.getNotasActividad({ unidad, tipo, actividad: act.numero });
+                    if (data) {
+                        _notasCache.set(key, data);
+                    }
+                } catch (_e) {
+                    // Si falla la precarga se cargará bajo demanda
+                }
             }
         }
 
