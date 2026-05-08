@@ -1703,7 +1703,17 @@ function syncEvaluationUnitBlocksXml(sheetXml, rows, unidades) {
 function copyActivityBlockXml(sheetXml, options) {
   const rowDelta = options.targetStart - options.sourceStart;
   let xml = sheetXml;
+  const blockSize = options.sourceEnd - options.sourceStart + 1;
 
+  // Paso 1: Insertar filas vacías para hacer espacio
+  // Las filas de la actividad anterior están en sourceStart a sourceEnd
+  // Necesitamos insertar blockSize filas después de sourceEnd
+  for (let i = 0; i < blockSize; i += 1) {
+    const insertAfterRow = options.sourceEnd + i;
+    xml = insertEmptyXmlRow(xml, insertAfterRow + 1);
+  }
+
+  // Paso 2: Copiar el bloque completo línea por línea
   for (let rowIdx = options.sourceStart; rowIdx <= options.sourceEnd; rowIdx += 1) {
     const sourceRowNumber = rowIdx + 1;
     const targetRowNumber = rowIdx + rowDelta + 1;
@@ -1715,7 +1725,7 @@ function copyActivityBlockXml(sheetXml, options) {
 
     // Copiar la fila completa y ajustar el número
     const clonedFullRow = cloneFullXmlRow(sourceRow, targetRowNumber, options);
-    xml = upsertFullXmlRow(xml, clonedFullRow, targetRowNumber);
+    xml = replaceXmlRow(xml, clonedFullRow, targetRowNumber);
   }
 
   xml = copyActivityMergesXml(xml, options);
@@ -1909,6 +1919,34 @@ function cloneFullXmlRow(sourceRowXml, targetRowNumber, options) {
   ));
 
   return clonedXml;
+}
+
+function insertEmptyXmlRow(sheetXml, rowNumber) {
+  // Insertar una fila vacía con el número especificado
+  const emptyRow = `<row r="${rowNumber}"/>`;
+
+  // Buscar la posición correcta para insertar
+  const rowRegexAll = /<row\b[^>]*\br="(\d+)"[^>]*>[\s\S]*?<\/row>/g;
+  let rowMatch;
+
+  while ((rowMatch = rowRegexAll.exec(sheetXml)) !== null) {
+    if (Number(rowMatch[1]) >= rowNumber) {
+      return sheetXml.replace(rowMatch[0], `${emptyRow}${rowMatch[0]}`);
+    }
+  }
+
+  // Si no hay fila con número mayor, insertar antes de </sheetData>
+  if (sheetXml.includes('</sheetData>')) {
+    return sheetXml.replace('</sheetData>', `${emptyRow}</sheetData>`);
+  }
+
+  throw new Error('La hoja no tiene una estructura sheetData válida.');
+}
+
+function replaceXmlRow(sheetXml, newRowXml, targetRowNumber) {
+  // Reemplazar una fila existente (debe existir después de insertEmptyXmlRow)
+  const rowRegex = new RegExp(`<row\\b[^>]*\\br="${targetRowNumber}"[^>]*(?:/>|>[\\s\\S]*?<\\/row>)`);
+  return sheetXml.replace(rowRegex, newRowXml);
 }
 
 function upsertFullXmlRow(sheetXml, newRowXml, targetRowNumber) {
