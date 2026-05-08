@@ -471,6 +471,7 @@
         let autoSaveTimeout = null;
         let hayCambiosSinGuardar = false;
         const AUTO_SAVE_DELAY_MS = 15000;
+        const _notasCache = new Map();
 
         const messageBox = document.getElementById("message");
         const unidadSelect = document.getElementById("unidadSelect");
@@ -560,7 +561,7 @@
                 applyPastedGrades(startIdx, pastedValues);
             });
 
-            loadNotas();
+            loadNotas({ isInitial: true });
         });
 
         async function loadNotasConGuardado(options = {}) {
@@ -573,14 +574,22 @@
         async function loadNotas(options = {}) {
             try {
                 setDisabled(true);
-                showMessage("Leyendo actividades de la hoja seleccionada...", "info");
 
-                const payload = {
-                    unidad: unidadSelect.value || "U1",
-                    tipo: tipoSelect.value || "practicas",
-                    actividad: options.keepActivity === false ? 1 : Number(actividadSelect.value || 1)
-                };
-                const data = await window.electronExcel.getNotasActividad(payload);
+                const unidad = unidadSelect.value || "U1";
+                const tipo = tipoSelect.value || "practicas";
+                const actividad = options.keepActivity === false ? 1 : Number(actividadSelect.value || 1);
+                const cacheKey = `${unidad}:${tipo}:${actividad}`;
+
+                let data;
+                if (options.fromCache !== false && _notasCache.has(cacheKey)) {
+                    data = _notasCache.get(cacheKey);
+                } else {
+                    showMessage("Leyendo actividades de la hoja seleccionada...", "info");
+                    data = await window.electronExcel.getNotasActividad({ unidad, tipo, actividad });
+                    if (data) {
+                        _notasCache.set(cacheKey, data);
+                    }
+                }
 
                 if (!data) {
                     showMessage("No se encontro el Excel. Seleccionalo desde el gestor de alumnos o coloca la plantilla en esta carpeta.", "error");
@@ -600,10 +609,36 @@
                 renderActivityMeta(data);
                 renderTable();
                 showMessage("Actividad cargada correctamente.", "success");
+
+                // Precargar el resto de unidades en segundo plano tras la primera carga
+                if (options.isInitial && data.unidades && data.unidades.length > 1) {
+                    preloadOtherUnidades(data.unidades, tipo);
+                }
             } catch (error) {
                 showMessage(error.message || "No se pudieron cargar las notas.", "error");
             } finally {
                 setDisabled(false);
+            }
+        }
+
+        async function preloadOtherUnidades(unidades, tipo) {
+            const currentUnidad = unidadSelect.value || "U1";
+            const otrasUnidades = unidades
+                .map((u) => u.codigo)
+                .filter((codigo) => codigo !== currentUnidad);
+
+            for (const codigo of otrasUnidades) {
+                const key = `${codigo}:${tipo}:1`;
+                if (_notasCache.has(key)) continue;
+
+                try {
+                    const data = await window.electronExcel.getNotasActividad({ unidad: codigo, tipo, actividad: 1 });
+                    if (data) {
+                        _notasCache.set(key, data);
+                    }
+                } catch (_e) {
+                    // Ignorar errores de precarga — se cargará bajo demanda si falla
+                }
             }
         }
 
@@ -762,6 +797,9 @@
                 });
                 currentState = data;
                 currentNotes = (data.notas || []).map((item) => ({ ...item }));
+                // Invalidar caché de esta clave para que la próxima carga relean datos actualizados
+                const savedKey = `${currentState.unidad}:${currentState.tipo}:${currentState.actividad}`;
+                _notasCache.set(savedKey, data);
                 renderControls(data);
                 renderSummary(data);
                 renderActivityMeta(data);
