@@ -1869,11 +1869,12 @@ function upsertXmlRowCells(sheetXml, sourceRowXml, targetRowNumber, typeStartCol
   const targetRow = getXmlRow(sheetXml, targetRowNumber);
 
   if (targetRow) {
-    const cleanedRow = removeXmlCellsInColRange(targetRow, typeStartCol, typeEndCol);
+    // En lugar de limpiar celdas (que causa corrupción), simplemente insertar las clonadas
+    // Las celdas no copiadas simplemente no existirán en la nueva fila
     const updatedRow = clonedCells.reduce((rowXml, cellXml) => {
       const colName = getXmlAttribute(cellXml, 'r').replace(/\d+$/, '');
       return insertXmlCellInRow(rowXml, cellXml, columnIndex(colName));
-    }, cleanedRow);
+    }, targetRow);
     return sheetXml.replace(targetRow, updatedRow);
   }
 
