@@ -1721,7 +1721,7 @@ function copyActivityBlockXml(sheetXml, options) {
     const clonedCells = cloneActivityRangeCells(sourceRow, targetRowNumber, options);
 
     // Insertar o actualizar la fila destino con las celdas clonadas
-    xml = upsertActivityRowCells(xml, targetRowNumber, clonedCells, sourceRowNumber);
+    xml = upsertActivityRowCells(xml, targetRowNumber, clonedCells, options);
   }
 
   // Copiar merged cells dentro del rango de la actividad
@@ -1940,24 +1940,30 @@ function cloneActivityRangeCells(sourceRowXml, targetRowNumber, options) {
   return cells;
 }
 
-function upsertActivityRowCells(sheetXml, targetRowNumber, clonedCells, sourceRowNumber) {
-  // Insertar o actualizar la fila destino con las celdas clonadas
-  // Si la fila no existe, crearla; si existe, actualizar con las nuevas celdas
-  let targetRow = getXmlRow(sheetXml, targetRowNumber);
+function upsertActivityRowCells(sheetXml, targetRowNumber, clonedCells, options) {
+  const targetRow = getXmlRow(sheetXml, targetRowNumber);
 
   if (!targetRow) {
-    // Crear nueva fila si no existe
-    const sourceRow = getXmlRow(sheetXml, sourceRowNumber);
     const newRow = buildActivityRowFromCells(targetRowNumber, clonedCells);
     return insertXmlRowXml(sheetXml, newRow);
   }
 
-  // Actualizar celdas en la fila existente
-  let updatedRow = targetRow;
+  // Primero eliminar todas las celdas del rango de la actividad en la fila destino
+  // para no dejar celdas duplicadas o sobrantes
+  let updatedRow = targetRow.replace(/<c\b[^>]*(?:\/>|>[\s\S]*?<\/c>)/g, (cellXml) => {
+    const cellRef = getXmlAttribute(cellXml, 'r');
+    if (!cellRef) return cellXml;
+    const colIdx = columnIndex(cellRef.replace(/\d+$/, ''));
+    if (colIdx >= options.typeStartCol && colIdx <= options.typeEndCol) {
+      return '';
+    }
+    return cellXml;
+  });
+
+  // Luego insertar las celdas clonadas en orden
   for (const clonedCell of clonedCells) {
     const cellRef = getXmlAttribute(clonedCell, 'r');
     if (!cellRef) continue;
-
     const colName = cellRef.replace(/\d+$/, '');
     updatedRow = insertXmlCellInRow(updatedRow, clonedCell, columnIndex(colName));
   }
