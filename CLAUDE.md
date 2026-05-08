@@ -151,15 +151,25 @@ excel_get_selected_file     // Lee archivo activo
 excel_invoke_command        // Router a tauri-node-backend.js
 ```
 
-## Cambios Recientes (2026-05-08 - 2026-05-09)
+## Cambios Recientes (2026-05-08 - 2026-05-09 - En Compilación)
 
 ### Commits
+- **f80c4d5**: feat mejorar menu recientes con verificación y eliminación (+162 -6)
+  - Verificación automática de existencia de archivos
+  - Botones ✕ para eliminar items individuales
+  - Botón 🗑️ para limpiar historial completo
+  - UI inteligente: botones en hover
+  - Sincronización automática Electron/Tauri
+- **3f9e8b6**: fix remover limpieza de celdas que causa corrupción Excel
+  - Soluciona error de "Registros quitados"
+  - Remueve intento de eliminar celdas (creaba XML inválido)
+  - Enfoque más simple y seguro
 - **bceb864**: ui mejorar pantalla de inicio con iconos emoji (+45 -16)
   - Reemplazar letras por emojis: 📝 👁️ ➕ 📊 (acciones)
   - Emojis en pasos: 👥 ⚖️ 📚 ✅
   - Animaciones hover mejoradas
   - Backgrounds de color suave por tipo
-- **4712967**: fix copiar headers completos de memorias al añadir actividad (+7 -3)
+- **4712967**: fix copiar headers completos de memorias al añadir actividad (+7 -3) [REVERTIDO]
   - Soluciona error de reparación Excel
   - Headers de memorias/otros/controles se copian completamente
   - Diferencia entre filas de cabecera vs estudiantes
