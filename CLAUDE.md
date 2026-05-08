@@ -151,12 +151,16 @@ excel_get_selected_file     // Lee archivo activo
 excel_invoke_command        // Router a tauri-node-backend.js
 ```
 
-## Cambios Recientes (2026-05-08)
+## Cambios Recientes (2026-05-08 - 2026-05-09)
 
 ### Commits
 - **8aa340f**: reparado error que borraba hoja (+71 -6 main.js)
   - Fix crítico: validación XML + normalización cell refs en copia de actividades
   - Previene corrupción de archivos al guardar
+- **4712967**: fix copiar headers completos de memorias al añadir actividad (+7 -3)
+  - Soluciona error de reparación Excel
+  - Headers de memorias/otros/controles se copian completamente
+  - Diferencia entre filas de cabecera vs estudiantes
 - **9271e96**: incluida opcion añadir actividad
 - **69ba757**: creado añadir actividad
 - **2c80aae**: añadidonombre actividad
@@ -165,7 +169,9 @@ excel_invoke_command        // Router a tauri-node-backend.js
 ### Nueva Funcionalidad
 - Opción de agregar actividades al sistema
 - Campo nombre para actividades
-- Fix crítico: previene borramiento accidental de hojas Excel
+- Dos fixes críticos que garantizan integridad de datos:
+  1. Validación XML antes de guardar
+  2. Copia completa de headers de otros tipos de actividad
 
 ## Checklist de Estado
 
