@@ -1548,7 +1548,7 @@ async function editWorkbookSheetsXml(filePath, sheetEdits) {
 }
 
 function assertWorksheetXmlLooksSafe(sheetXml, sheetName) {
-  const rowRegex = /<row\b[^>]*(?:\/>|>[\s\S]*?<\/row>)/g;
+  const rowRegex = /<row\b[^>\/]*(?:\/>|>[\s\S]*?<\/row>)/g;
   let rowMatch;
 
   while ((rowMatch = rowRegex.exec(sheetXml)) !== null) {
@@ -1561,7 +1561,7 @@ function assertWorksheetXmlLooksSafe(sheetXml, sheetName) {
 
     const openCells = (rowXml.match(/<c\b/g) || []).length;
     const closedCells = (rowXml.match(/<\/c>/g) || []).length;
-    const selfClosedCells = (rowXml.match(/<c\b[^>]*\/>/g) || []).length;
+    const selfClosedCells = (rowXml.match(/<c\b[^>\/]*\/>/g) || []).length;
     if (openCells !== closedCells + selfClosedCells) {
       throw new Error(`El XML generado para ${sheetName}, fila ${rowNumber}, no es seguro. No se ha guardado el Excel.`);
     }
@@ -1719,20 +1719,31 @@ function syncEvaluationUnitBlocksXml(sheetXml, rows, unidades) {
 }
 
 function expandSharedFormulasInRange(sheetXml, range) {
-  // Recopilar todas las fórmulas master (t="shared" con contenido de fórmula y ref=)
-  const sharedMasters = {};
-  const masterRegex = /<c\b[^>]*\br="([A-Z]+)(\d+)"[^>]*>[\s\S]*?<f\b([^>]*)>([\s\S]*?)<\/f>[\s\S]*?<\/c>/g;
-  let m;
+  // Regex unificado y correcto que match cada celda individualmente
+  const cellRe = /<c\b[^>\/]*(?:\/>|>[\s\S]*?<\/c>)/g;
 
-  while ((m = masterRegex.exec(sheetXml)) !== null) {
-    const fTag = m[3];
-    const formula = m[4];
+  // Paso 1: Recopilar TODOS los masters (celdas con <f t="shared" si=N ref=...>FORMULA</f>)
+  const sharedMasters = {};
+  const allCells = sheetXml.match(cellRe) || [];
+
+  for (const cellXml of allCells) {
+    const ref = getXmlAttribute(cellXml, 'r');
+    if (!ref) continue;
+
+    // Buscar <f ...>FORMULA</f> con contenido (no self-closing)
+    const fMatch = cellXml.match(/<f\b([^>\/]*)>([\s\S]*?)<\/f>/);
+    if (!fMatch) continue;
+
+    const fTag = fMatch[1];
+    const formula = fMatch[2];
     const siAttr = getXmlAttribute(`<f ${fTag}>`, 'si');
     const tAttr = getXmlAttribute(`<f ${fTag}>`, 't');
     const refAttr = getXmlAttribute(`<f ${fTag}>`, 'ref');
 
     if (tAttr === 'shared' && siAttr !== null && refAttr && formula.trim()) {
-      sharedMasters[siAttr] = { formula: formula.trim(), masterCol: m[1], masterRow: Number(m[2]) };
+      const colName = ref.replace(/\d+$/, '');
+      const rowNum = Number(ref.match(/\d+$/)[0]);
+      sharedMasters[siAttr] = { formula: formula.trim(), masterCol: colName, masterRow: rowNum };
     }
   }
 
@@ -1740,16 +1751,23 @@ function expandSharedFormulasInRange(sheetXml, range) {
     return sheetXml;
   }
 
-  // Reemplazar celdas secundarias (shared sin fórmula) por fórmulas concretas
-  return sheetXml.replace(/<c\b[^>]*\br="([A-Z]+)(\d+)"[^>]*>[\s\S]*?<\/c>/g, (cellXml, colName, rowStr) => {
-    const rowNum = Number(rowStr);
+  // Paso 2: Reemplazar celdas secundarias (con <f t="shared" si=N/>) por fórmulas concretas
+  return sheetXml.replace(cellRe, (cellXml) => {
+    const ref = getXmlAttribute(cellXml, 'r');
+    if (!ref) return cellXml;
+
+    const colName = ref.replace(/\d+$/, '');
+    const rowNum = Number(ref.match(/\d+$/)[0]);
     const colIdx = columnIndex(colName);
 
-    if (colIdx < range.startCol || colIdx > range.endCol || rowNum < range.startRow || rowNum > range.endRow) {
+    // Solo procesar celdas dentro del rango
+    if (colIdx < range.startCol || colIdx > range.endCol ||
+        rowNum < range.startRow || rowNum > range.endRow) {
       return cellXml;
     }
 
-    const fSharedMatch = cellXml.match(/<f\b([^>]*)\/>/);
+    // Buscar <f .../>  self-closing (secundaria de shared formula)
+    const fSharedMatch = cellXml.match(/<f\b([^>\/]*)\/>/);
     if (!fSharedMatch) return cellXml;
 
     const fTag = fSharedMatch[1];
@@ -1762,9 +1780,8 @@ function expandSharedFormulasInRange(sheetXml, range) {
 
     const master = sharedMasters[siAttr];
     const rowDelta = rowNum - master.masterRow;
-    const colDelta = colIdx - columnIndex(master.masterCol);
 
-    // Desplazar la fórmula master por la diferencia de filas/cols
+    // Desplazar la fórmula master por la diferencia de filas
     const concreteFormula = master.formula.replace(/(\$?[A-Z]{1,3})(\$?)(\d+)/g, (match, col, absRow, rowNumStr) => {
       if (absRow) return match;
       const newRow = Number(rowNumStr) + rowDelta;
@@ -1856,7 +1873,7 @@ function extractAndAdjustCells(sourceRowXml, opts) {
     let adjusted = cellXml.replace(`r="${ref}"`, `r="${colName}${opts.dstRow}"`);
 
     // Ajustar fórmulas: desplazar referencias de fila que están dentro del bloque fuente
-    adjusted = adjusted.replace(/(<f\b[^>]*>)([\s\S]*?)(<\/f>)/g, (_match, open, formula, close) => {
+    adjusted = adjusted.replace(/(<f\b[^>\/]*>)([\s\S]*?)(<\/f>)/g, (_match, open, formula, close) => {
       const newOpen = shiftFormulaRefAttribute(open, opts.rowDelta, opts.srcRowStart, opts.srcRowEnd);
       const newFormula = shiftFormulaRows(formula, opts.rowDelta, opts.srcRowStart, opts.srcRowEnd);
       return `${newOpen}${newFormula}${close}`;
@@ -1900,14 +1917,14 @@ function normalizeCellRefsInRowsXml(sheetXml, startRowIdx, endRowIdx) {
   const startRowNumber = startRowIdx + 1;
   const endRowNumber = endRowIdx + 1;
 
-  return sheetXml.replace(/<row\b[^>]*\br="(\d+)"[^>]*(?:\/>|>[\s\S]*?<\/row>)/g, (rowXml, rowNumberText) => {
+  return sheetXml.replace(/<row\b[^>\/]*\br="(\d+)"[^>\/]*(?:\/>|>[\s\S]*?<\/row>)/g, (rowXml, rowNumberText) => {
     const rowNumber = Number(rowNumberText);
 
     if (rowNumber < startRowNumber || rowNumber > endRowNumber) {
       return rowXml;
     }
 
-    return rowXml.replace(/(<c\b[^>]*\br=")([A-Z]+)\d+(")/g, (_match, prefix, colName, suffix) => (
+    return rowXml.replace(/(<c\b[^>\/]*\br=")([A-Z]+)\d+(")/g, (_match, prefix, colName, suffix) => (
       `${prefix}${colName}${rowNumber}${suffix}`
     ));
   });
@@ -1921,7 +1938,7 @@ function clearActivityStudentInputCellsXml(sheetXml, options) {
   const startRowNumber = options.startRow + 1;
   const endRowNumber = options.startRow + options.rowCount;
 
-  return sheetXml.replace(/<row\b[^>]*\br="(\d+)"[^>]*>[\s\S]*?<\/row>/g, (rowXml, rowNumberText) => {
+  return sheetXml.replace(/<row\b[^>\/]*\br="(\d+)"[^>\/]*>[\s\S]*?<\/row>/g, (rowXml, rowNumberText) => {
     const rowNumber = Number(rowNumberText);
 
     if (rowNumber < startRowNumber || rowNumber > endRowNumber) {
@@ -1943,7 +1960,7 @@ function clearActivityStudentInputCellsXml(sheetXml, options) {
 }
 
 function getXmlRow(sheetXml, rowNumber) {
-  const rowRegex = new RegExp(`<row\\b[^>]*\\br="${rowNumber}"[^>]*>[\\s\\S]*?<\\/row>`);
+  const rowRegex = new RegExp(`<row\\b[^>\\/]*\\br="${rowNumber}"[^>\\/]*>[\\s\\S]*?<\\/row>`);
   const match = sheetXml.match(rowRegex);
   return match ? match[0] : null;
 }
@@ -1978,7 +1995,7 @@ function cloneXmlCell(cellXml, targetRowNumber, rowDelta, sourceStartRowNumber, 
   let next = colName
     ? cellXml.replace(`r="${cellRef}"`, `r="${colName}${targetRowNumber}"`)
     : cellXml;
-  next = next.replace(/(<f\b[^>]*>)([\s\S]*?)(<\/f>)/g, (_match, open, formula, close) => (
+  next = next.replace(/(<f\b[^>\/]*>)([\s\S]*?)(<\/f>)/g, (_match, open, formula, close) => (
     `${shiftFormulaRefAttribute(open, rowDelta, sourceStartRowNumber, sourceEndRowNumber)}${shiftFormulaRows(formula, rowDelta, sourceStartRowNumber, sourceEndRowNumber)}${close}`
   ));
   return next;
@@ -2047,7 +2064,7 @@ function removeXmlCellsInColRange(rowXml, startCol, endCol) {
 }
 
 function upsertFullXmlRow(sheetXml, newRowXml, targetRowNumber) {
-  const rowRegex = new RegExp(`<row\\b[^>]*\\br="${targetRowNumber}"[^>]*>[\\s\\S]*?<\\/row>`);
+  const rowRegex = new RegExp(`<row\\b[^>\\/]*\\br="${targetRowNumber}"[^>\\/]*>[\\s\\S]*?<\\/row>`);
   const existingRow = sheetXml.match(rowRegex);
 
   if (existingRow) {
@@ -2055,7 +2072,7 @@ function upsertFullXmlRow(sheetXml, newRowXml, targetRowNumber) {
   }
 
   // Si no existe, insertarla en el lugar correcto
-  const rowRegexAll = /<row\b[^>]*\br="(\d+)"[^>]*>[\s\S]*?<\/row>/g;
+  const rowRegexAll = /<row\b[^>\/]*\br="(\d+)"[^>\/]*>[\s\S]*?<\/row>/g;
   let rowMatch;
   let lastMatch = null;
 
@@ -2075,7 +2092,7 @@ function upsertFullXmlRow(sheetXml, newRowXml, targetRowNumber) {
 }
 
 function buildClonedXmlRow(sourceRowXml, targetRowNumber, clonedCells) {
-  const openTagMatch = sourceRowXml.match(/^<row\b[^>]*>/);
+  const openTagMatch = sourceRowXml.match(/^<row\b[^>\/]*>/);
   const openTag = openTagMatch
     ? setXmlAttribute(openTagMatch[0], 'r', targetRowNumber)
     : `<row r="${targetRowNumber}">`;
@@ -2084,7 +2101,7 @@ function buildClonedXmlRow(sourceRowXml, targetRowNumber, clonedCells) {
 
 function insertXmlRowXml(sheetXml, rowXml) {
   const targetRowNumber = Number(getXmlAttribute(rowXml, 'r'));
-  const rowRegex = /<row\b[^>]*\br="(\d+)"[^>]*>[\s\S]*?<\/row>/g;
+  const rowRegex = /<row\b[^>\/]*\br="(\d+)"[^>\/]*>[\s\S]*?<\/row>/g;
   let rowMatch;
 
   while ((rowMatch = rowRegex.exec(sheetXml)) !== null) {
@@ -2228,7 +2245,7 @@ function updateWorksheetDimensionRows(sheetXml, targetStartRowNumber, targetEndR
 function setXmlCell(sheetXml, rowIdx, colIdx, value, valueType = 'text') {
   const rowNumber = rowIdx + 1;
   const cellRef = `${columnName(colIdx)}${rowNumber}`;
-  const rowRegex = new RegExp(`<row\\b[^>]*\\br="${rowNumber}"[^>]*>[\\s\\S]*?<\\/row>`);
+  const rowRegex = new RegExp(`<row\\b[^>\\/]*\\br="${rowNumber}"[^>\\/]*>[\\s\\S]*?<\\/row>`);
   const rowMatch = sheetXml.match(rowRegex);
   let xml = sheetXml;
 
@@ -2238,7 +2255,7 @@ function setXmlCell(sheetXml, rowIdx, colIdx, value, valueType = 'text') {
   }
 
   const originalRow = rowMatch[0];
-  const cellRegex = new RegExp(`<c\\b[^>]*\\br="${escapeRegex(cellRef)}"[^>]*(?:>[\\s\\S]*?<\\/c>|\\s*\\/>)`);
+  const cellRegex = new RegExp(`<c\\b[^>\\/]*\\br="${escapeRegex(cellRef)}"[^>\\/]*(?:>[\\s\\S]*?<\\/c>|\\s*\\/>)`);
 
   if (value === null || value === undefined || value === '') {
     const clearedRow = originalRow.replace(cellRegex, '');
