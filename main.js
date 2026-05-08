@@ -1842,14 +1842,15 @@ function copyActivityBlockXml(sheetXml, options) {
   );
 
   // Paso 5: Borrar celdas de notas de estudiantes en el destino
-  xml = clearActivityStudentInputCellsXml(xml, {
-    startRow: options.targetStart + options.firstStudentRowOffset,
-    rowCount: options.notesToClear,
-    ranges: [
-      { startCol: typeStartCol + 2, endCol: typeStartCol + 3 },
-      { startCol: options.noteCol, endCol: typeEndCol }
-    ]
-  });
+  // ⚠️ TEMPORALMENTE DESHABILITADO para debug: este paso estaba borrando valores pegados
+  // xml = clearActivityStudentInputCellsXml(xml, {
+  //   startRow: options.targetStart + options.firstStudentRowOffset,
+  //   rowCount: options.notesToClear,
+  //   ranges: [
+  //     { startCol: typeStartCol + 2, endCol: typeStartCol + 3 },
+  //     { startCol: options.noteCol, endCol: typeEndCol }
+  //   ]
+  // });
 
   return xml;
 }
