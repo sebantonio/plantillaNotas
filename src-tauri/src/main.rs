@@ -132,6 +132,11 @@ fn excel_get_alumnos_informes() -> Result<Value, String> {
 }
 
 #[tauri::command]
+fn excel_set_selected_file(file_path: String) -> Result<Value, String> {
+    call_node_backend("setSelectedFile", json!({ "filePath": file_path }))
+}
+
+#[tauri::command]
 fn app_open_external(url: String) -> Result<(), String> {
     webbrowser::open(&url).map_err(|error| format!("No se pudo abrir el enlace: {error}"))
 }
@@ -141,6 +146,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             excel_select_file,
             excel_get_selected_file,
+            excel_set_selected_file,
             excel_save_alumnos,
             excel_get_unidades,
             excel_save_unidades,

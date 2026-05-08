@@ -1743,6 +1743,16 @@ function setSelectedExcelPath(filePath) {
   selectedExcelPath = filePath || null;
 }
 
+async function commandSetSelectedFile(payload) {
+  const filePath = payload.filePath;
+  if (!filePath) throw new Error('No se especificó ningún archivo.');
+  if (!fs.existsSync(filePath)) throw new Error('El archivo no existe: ' + filePath);
+  selectedExcelPath = filePath;
+  invalidateWorkbookCache();
+  clearEvaluationsCache();
+  return { filePath, fileName: path.basename(filePath) };
+}
+
 async function commandGetSelectedFile() {
   if (!selectedExcelPath) {
     selectedExcelPath = findDefaultExcelPath();
@@ -1898,7 +1908,8 @@ module.exports = {
     saveNotasActividad: commandSaveNotasActividad,
     getNotasEvaluacion: commandGetNotasEvaluacion,
     getNotasEvaluacionAlumno: commandGetNotasEvaluacionAlumno,
-    getAlumnosInformes: commandGetAlumnosInformes
+    getAlumnosInformes: commandGetAlumnosInformes,
+    setSelectedFile: commandSetSelectedFile
   },
   findDefaultExcelPath,
   setSelectedExcelPath

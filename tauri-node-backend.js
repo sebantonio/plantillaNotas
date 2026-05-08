@@ -40,7 +40,7 @@ async function main() {
     ? await commands.selectFile(payload.filePath)
     : await commands[command](payload);
 
-  if (command === 'selectFile' && payload.filePath) {
+  if ((command === 'selectFile' || command === 'setSelectedFile') && payload.filePath) {
     writeSelectedPath(payload.filePath);
   }
 

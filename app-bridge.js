@@ -29,6 +29,7 @@
     getNotasEvaluacion: (payload) => invoke("excel_get_notas_evaluacion", { payload }),
     getNotasEvaluacionAlumno: (payload) => invoke("excel_get_notas_evaluacion_alumno", { payload }),
     getAlumnosInformes: () => invoke("excel_get_alumnos_informes"),
+    setSelectedFile: (filePath) => invoke("excel_set_selected_file", { filePath }),
     openExternal: (url) => invoke("app_open_external", { url })
   };
 })();

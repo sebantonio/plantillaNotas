@@ -238,61 +238,95 @@
         .side-panel {
             display: flex;
             flex-direction: column;
+            gap: 16px;
+            padding: 20px;
+        }
+
+        .file-name {
+            font-size: 0.92rem;
+            font-weight: 700;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .recent-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .recent-item {
+            display: flex;
+            align-items: center;
             justify-content: space-between;
-            gap: 22px;
-            padding: 24px;
+            gap: 8px;
+            padding: 7px 10px;
+            border-radius: 6px;
+            background: rgba(37, 99, 235, 0.04);
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: background 0.15s ease, border-color 0.15s ease;
         }
 
-        .side-panel h2 {
-            font-size: 1.35rem;
-            margin-bottom: 10px;
+        .recent-item:hover {
+            background: rgba(37, 99, 235, 0.1);
+            border-color: rgba(37, 99, 235, 0.25);
         }
 
-        .side-panel p {
+        .recent-item.active-file {
+            background: rgba(37, 99, 235, 0.1);
+            border-color: rgba(37, 99, 235, 0.3);
+        }
+
+        .recent-item-name {
+            font-size: 0.87rem;
+            font-weight: 600;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 0;
+        }
+
+        .recent-item-arrow {
+            color: var(--primary);
+            font-size: 0.8rem;
+            flex-shrink: 0;
+        }
+
+        .recent-empty {
+            font-size: 0.87rem;
             color: var(--muted);
-            line-height: 1.5;
+            font-style: italic;
         }
 
-        .quick-link {
+        .online-link {
             display: flex;
             align-items: center;
             justify-content: center;
-            min-height: 48px;
-            color: #ffffff;
-            background: var(--primary);
-            border-radius: 8px;
+            gap: 6px;
+            padding: 7px 12px;
+            color: var(--primary);
+            background: rgba(37, 99, 235, 0.06);
+            border: 1px solid rgba(37, 99, 235, 0.22);
+            border-radius: 7px;
             text-decoration: none;
-            font-weight: 800;
-            transition: background 0.18s ease, transform 0.18s ease;
+            font-size: 0.87rem;
+            font-weight: 700;
+            transition: background 0.15s ease;
         }
 
-        .quick-link:hover {
-            background: var(--primary-dark);
-            transform: translateY(-2px);
-        }
-
-        .status-list {
-            display: grid;
-            gap: 10px;
-            margin-top: 18px;
-        }
-
-        .status-item {
-            display: flex;
-            justify-content: space-between;
-            gap: 14px;
-            padding: 10px 0;
-            border-bottom: 1px solid var(--line);
-            color: var(--muted);
-            font-size: 0.94rem;
-        }
-
-        .status-item:last-child {
-            border-bottom: 0;
-        }
-
-        .status-item strong {
-            color: var(--text);
+        .online-link:hover {
+            background: rgba(37, 99, 235, 0.13);
         }
 
         .setup-panel {
@@ -516,35 +550,24 @@
 
             <aside class="side-panel" aria-labelledby="excel-title">
                 <div>
-                    <div class="section-kicker">Archivo principal</div>
-                    <h2 id="excel-title">Plantilla Excel del curso</h2>
-                    <p>
-                        Usa este acceso para abrir la versión de OneDrive, trabajar con los datos reales y mantener la plantilla sincronizada.
-                    </p>
-                    <div class="status-list" aria-label="Estado de la aplicación">
-                        <div class="status-item">
-                            <span>Modo</span>
-                            <strong>Local</strong>
-                        </div>
-                        <div class="status-item">
-                            <span>Servidor</span>
-                            <strong>No necesario</strong>
-                        </div>
-                        <div class="status-item">
-                            <span>Estado</span>
-                            <strong>Listo</strong>
-                        </div>
-                    </div>
+                    <div class="section-kicker">Archivo activo</div>
+                    <p class="file-name" id="activeFileName">Cargando...</p>
                 </div>
 
-                <a
-                    class="quick-link"
-                    href="https://crfpcastilla-my.sharepoint.com/:x:/g/personal/sslm07_educastillalamancha_es/IQCcqkwxp64ZQ7zaAT65YnDDAUq1WmRzaTsFUgF8vd8QcSw?e=MDXWht"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                >
-                    Abrir Excel en OneDrive
-                </a>
+                <div class="file-actions">
+                    <button class="small-button" type="button" id="changeFileBtn">Cambiar archivo</button>
+                    <a
+                        class="online-link"
+                        href="https://crfpcastilla-my.sharepoint.com/:x:/g/personal/sslm07_educastillalamancha_es/IQCcqkwxp64ZQ7zaAT65YnDDAUq1WmRzaTsFUgF8vd8QcSw?e=MDXWht"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >OneDrive ↗</a>
+                </div>
+
+                <div>
+                    <div class="section-kicker" id="recentKicker" style="display:none">Recientes</div>
+                    <div class="recent-list" id="recentFilesList"></div>
+                </div>
             </aside>
         </section>
 
@@ -591,15 +614,99 @@
     </main>
 
     <script>
-        const oneDriveUrl = "https://crfpcastilla-my.sharepoint.com/:x:/g/personal/sslm07_educastillalamancha_es/IQCcqkwxp64ZQ7zaAT65YnDDAUq1WmRzaTsFUgF8vd8QcSw?e=MDXWht";
+        const RECENT_KEY = "recentExcelFiles";
+        const MAX_RECENT = 6;
 
-        console.log("%cGestor de Notas FP", "color: #2563eb; font-size: 20px; font-weight: bold;");
-        console.log("Panel principal cargado. Archivo Excel:", oneDriveUrl);
+        function getRecentFiles() {
+            try { return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); }
+            catch { return []; }
+        }
 
-        document.querySelectorAll("a").forEach((link) => {
-            link.addEventListener("click", () => {
-                console.log("Navegando a:", link.getAttribute("href"));
+        function saveRecentFile(filePath, fileName) {
+            const recent = getRecentFiles().filter((f) => f.path !== filePath);
+            recent.unshift({ path: filePath, name: fileName });
+            localStorage.setItem(RECENT_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)));
+        }
+
+        function renderRecentFiles(activeFilePath) {
+            const recent = getRecentFiles();
+            const list = document.getElementById("recentFilesList");
+            const kicker = document.getElementById("recentKicker");
+
+            if (!recent.length) {
+                list.innerHTML = `<span class="recent-empty">Ningún archivo abierto aún.</span>`;
+                kicker.style.display = "none";
+                return;
+            }
+
+            kicker.style.display = "";
+            list.innerHTML = recent.map((f) => `
+                <div class="recent-item${f.path === activeFilePath ? " active-file" : ""}"
+                     data-path="${escapeAttr(f.path)}" title="${escapeAttr(f.path)}">
+                    <span class="recent-item-name">${escapeHtml(f.name)}</span>
+                    <span class="recent-item-arrow">→</span>
+                </div>
+            `).join("");
+
+            list.querySelectorAll(".recent-item").forEach((item) => {
+                item.addEventListener("click", () => activateFile(item.dataset.path));
             });
+        }
+
+        async function activateFile(filePath) {
+            if (!window.electronExcel) return;
+            try {
+                const result = await window.electronExcel.setSelectedFile(filePath);
+                if (result) {
+                    const recent = getRecentFiles().find((f) => f.path === filePath);
+                    saveRecentFile(filePath, result.fileName || recent?.name || filePath.split(/[\\/]/).pop());
+                    document.getElementById("activeFileName").textContent = result.fileName || filePath.split(/[\\/]/).pop();
+                    renderRecentFiles(filePath);
+                }
+            } catch (err) {
+                alert("No se pudo activar el archivo:\n" + err);
+            }
+        }
+
+        function escapeHtml(str) {
+            return String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        function escapeAttr(str) {
+            return String(str || "").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        document.addEventListener("DOMContentLoaded", async () => {
+            if (!window.electronExcel) return;
+
+            const changeBtn = document.getElementById("changeFileBtn");
+            changeBtn.addEventListener("click", async () => {
+                try {
+                    const result = await window.electronExcel.selectFile();
+                    if (result) {
+                        saveRecentFile(result.filePath, result.fileName);
+                        document.getElementById("activeFileName").textContent = result.fileName;
+                        renderRecentFiles(result.filePath);
+                    }
+                } catch (err) {
+                    alert("Error al seleccionar archivo:\n" + err);
+                }
+            });
+
+            try {
+                const result = await window.electronExcel.getSelectedFile();
+                if (result) {
+                    saveRecentFile(result.filePath, result.fileName);
+                    document.getElementById("activeFileName").textContent = result.fileName;
+                    renderRecentFiles(result.filePath);
+                } else {
+                    document.getElementById("activeFileName").textContent = "Sin archivo seleccionado";
+                    renderRecentFiles(null);
+                }
+            } catch {
+                document.getElementById("activeFileName").textContent = "Sin archivo";
+                renderRecentFiles(null);
+            }
         });
     </script>
 </body>
