@@ -1700,12 +1700,78 @@ function syncEvaluationUnitBlocksXml(sheetXml, rows, unidades) {
   return xml;
 }
 
+function expandSharedFormulasInRange(sheetXml, range) {
+  // Recopilar todas las fórmulas master (t="shared" con contenido de fórmula y ref=)
+  const sharedMasters = {};
+  const masterRegex = /<c\b[^>]*\br="([A-Z]+)(\d+)"[^>]*>[\s\S]*?<f\b([^>]*)>([\s\S]*?)<\/f>[\s\S]*?<\/c>/g;
+  let m;
+
+  while ((m = masterRegex.exec(sheetXml)) !== null) {
+    const fTag = m[3];
+    const formula = m[4];
+    const siAttr = getXmlAttribute(`<f ${fTag}>`, 'si');
+    const tAttr = getXmlAttribute(`<f ${fTag}>`, 't');
+    const refAttr = getXmlAttribute(`<f ${fTag}>`, 'ref');
+
+    if (tAttr === 'shared' && siAttr !== null && refAttr && formula.trim()) {
+      sharedMasters[siAttr] = { formula: formula.trim(), masterCol: m[1], masterRow: Number(m[2]) };
+    }
+  }
+
+  if (Object.keys(sharedMasters).length === 0) {
+    return sheetXml;
+  }
+
+  // Reemplazar celdas secundarias (shared sin fórmula) por fórmulas concretas
+  return sheetXml.replace(/<c\b[^>]*\br="([A-Z]+)(\d+)"[^>]*>[\s\S]*?<\/c>/g, (cellXml, colName, rowStr) => {
+    const rowNum = Number(rowStr);
+    const colIdx = columnIndex(colName);
+
+    if (colIdx < range.startCol || colIdx > range.endCol || rowNum < range.startRow || rowNum > range.endRow) {
+      return cellXml;
+    }
+
+    const fSharedMatch = cellXml.match(/<f\b([^>]*)\/>/);
+    if (!fSharedMatch) return cellXml;
+
+    const fTag = fSharedMatch[1];
+    const siAttr = getXmlAttribute(`<f ${fTag}>`, 'si');
+    const tAttr = getXmlAttribute(`<f ${fTag}>`, 't');
+
+    if (tAttr !== 'shared' || siAttr === null || !sharedMasters[siAttr]) {
+      return cellXml;
+    }
+
+    const master = sharedMasters[siAttr];
+    const rowDelta = rowNum - master.masterRow;
+    const colDelta = colIdx - columnIndex(master.masterCol);
+
+    // Desplazar la fórmula master por la diferencia de filas/cols
+    const concreteFormula = master.formula.replace(/(\$?[A-Z]{1,3})(\$?)(\d+)/g, (match, col, absRow, rowNumStr) => {
+      if (absRow) return match;
+      const newRow = Number(rowNumStr) + rowDelta;
+      return `${col}${newRow}`;
+    });
+
+    const expandedF = `<f>${concreteFormula}</f>`;
+    return cellXml.replace(fSharedMatch[0], expandedF);
+  });
+}
+
 function copyActivityBlockXml(sheetXml, options) {
   // Solo copiar el rango específico de la actividad (filas + columnas de esa actividad)
   // Sin insertar filas vacías - solo pegar directamente en el destino
   const rowDelta = options.targetStart - options.sourceStart;
-  let xml = sheetXml;
-  const blockSize = options.sourceEnd - options.sourceStart + 1;
+
+  // Expandir fórmulas compartidas primero, para poder copiarlas correctamente
+  const xmlExpanded = expandSharedFormulasInRange(sheetXml, {
+    startRow: options.sourceStart + 1,
+    endRow: options.sourceEnd + 1,
+    startCol: options.typeStartCol,
+    endCol: options.typeEndCol
+  });
+
+  let xml = xmlExpanded;
 
   // Copiar cada fila del bloque origen al destino, solo el rango de columnas de la actividad
   for (let rowIdx = options.sourceStart; rowIdx <= options.sourceEnd; rowIdx += 1) {
