@@ -41,6 +41,18 @@ const ACTIVITY_TYPES = [
   { key: 'controles', label: 'Control teorico/practico', baseCol: 334 }
 ];
 
+// Rangos fijos por tipo de actividad (columnas en 0-index, filas en 0-index)
+// practicas A:DF = 0:109, memorias DI:HM = 112:220, otros HP:LT = 223:331, controles LW:QA = 334:442
+// Una actividad ocupa 41 filas de contenido, stride entre actividades = 44
+const ACTIVITY_BLOCK_ROWS = 41;
+const ACTIVITY_BLOCK_STRIDE = 44;
+const ACTIVITY_FIXED_COLS = {
+  practicas:  { startCol: 0,   endCol: 109 },
+  memorias:   { startCol: 112, endCol: 220 },
+  otros:      { startCol: 223, endCol: 331 },
+  controles:  { startCol: 334, endCol: 442 }
+};
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -626,6 +638,13 @@ async function addActividadToFile(filePath, unidad, tipo, nombreActividad, inclu
   const sheet = workbook.Sheets[unidad];
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
   const selectedType = getActivityType(tipo);
+  const fixedCols = ACTIVITY_FIXED_COLS[selectedType.key];
+
+  if (!fixedCols) {
+    throw new Error(`Tipo de actividad no reconocido: ${tipo}`);
+  }
+
+  // Buscar el último bloque para saber en qué fila empieza y el número siguiente
   const blocks = findActivityBlocks(rows, selectedType.key).sort((a, b) => Number(a.numero) - Number(b.numero));
   const previousBlock = blocks[blocks.length - 1];
 
@@ -633,12 +652,11 @@ async function addActividadToFile(filePath, unidad, tipo, nombreActividad, inclu
     throw new Error(`No se encontro ninguna actividad previa de ${selectedType.label} en ${unidad}.`);
   }
 
-  const stride = getActivityBlockStride(blocks);
   const newNumber = Number(previousBlock.numero) + 1;
-  const sourceStart = previousBlock.titleRow;
-  const sourceEnd = previousBlock.titleRow + stride - 1;
-  const targetStart = previousBlock.titleRow + stride;
-  const typeEndCol = getActivityTypeEndCol(selectedType.key);
+  // El bloque fuente: desde titleRow del bloque anterior, con tamaño fijo
+  const sourceStart = previousBlock.titleRow;          // 0-indexed
+  const sourceEnd = sourceStart + ACTIVITY_BLOCK_ROWS - 1;
+  const targetStart = sourceStart + ACTIVITY_BLOCK_STRIDE;
   const notesToClear = extractActivityNotes(rows, previousBlock).length;
 
   await editWorkbookSheetsXml(filePath, {
@@ -646,8 +664,8 @@ async function addActividadToFile(filePath, unidad, tipo, nombreActividad, inclu
       sourceStart,
       sourceEnd,
       targetStart,
-      typeStartCol: selectedType.baseCol,
-      typeEndCol,
+      typeStartCol: fixedCols.startCol,
+      typeEndCol: fixedCols.endCol,
       numberCol: previousBlock.numberCol,
       nameValueCol: previousBlock.nameValueCol,
       includedRowOffset: previousBlock.includedRow - previousBlock.titleRow,
@@ -1759,50 +1777,45 @@ function expandSharedFormulasInRange(sheetXml, range) {
 }
 
 function copyActivityBlockXml(sheetXml, options) {
-  // Solo copiar el rango específico de la actividad (filas + columnas de esa actividad)
-  // Sin insertar filas vacías - solo pegar directamente en el destino
   const rowDelta = options.targetStart - options.sourceStart;
+  const { typeStartCol, typeEndCol, sourceStart, sourceEnd } = options;
 
-  // Expandir fórmulas compartidas primero, para poder copiarlas correctamente
-  const xmlExpanded = expandSharedFormulasInRange(sheetXml, {
-    startRow: options.sourceStart + 1,
-    endRow: options.sourceEnd + 1,
-    startCol: options.typeStartCol,
-    endCol: options.typeEndCol
+  // Paso 1: Expandir fórmulas compartidas en el bloque fuente para poder copiarlas
+  let xml = expandSharedFormulasInRange(sheetXml, {
+    startRow: sourceStart + 1,
+    endRow: sourceEnd + 1,
+    startCol: typeStartCol,
+    endCol: typeEndCol
   });
 
-  let xml = xmlExpanded;
+  // Paso 2: Para cada fila del bloque fuente, copiar las celdas del rango fijo al destino
+  for (let rowIdx = sourceStart; rowIdx <= sourceEnd; rowIdx += 1) {
+    const srcRow = rowIdx + 1;          // número de fila fuente (1-indexed en XML)
+    const dstRow = srcRow + rowDelta;   // número de fila destino
 
-  // Copiar cada fila del bloque origen al destino, solo el rango de columnas de la actividad
-  for (let rowIdx = options.sourceStart; rowIdx <= options.sourceEnd; rowIdx += 1) {
-    const sourceRowNumber = rowIdx + 1;
-    const targetRowNumber = rowIdx + rowDelta + 1;
-    const sourceRow = getXmlRow(xml, sourceRowNumber);
+    const sourceRowXml = getXmlRow(xml, srcRow);
+    if (!sourceRowXml) continue;
 
-    if (!sourceRow) {
-      continue;
-    }
+    // Extraer y ajustar las celdas del rango fijo de columnas
+    const clonedCells = extractAndAdjustCells(sourceRowXml, {
+      dstRow,
+      rowDelta,
+      srcRowStart: sourceStart + 1,
+      srcRowEnd: sourceEnd + 1,
+      colStart: typeStartCol,
+      colEnd: typeEndCol
+    });
 
-    // Clonar SOLO las celdas del rango de la actividad (typeStartCol a typeEndCol)
-    const clonedCells = cloneActivityRangeCells(sourceRow, targetRowNumber, options);
-
-    // Insertar o actualizar la fila destino con las celdas clonadas
-    xml = upsertActivityRowCells(xml, targetRowNumber, clonedCells, options);
+    // Pegar en la fila destino (reemplazar el rango, sin tocar lo que está fuera)
+    xml = pasteRangeCells(xml, dstRow, clonedCells, typeStartCol, typeEndCol);
   }
 
-  // Copiar merged cells dentro del rango de la actividad
+  // Paso 3: Copiar merged cells del rango
   xml = copyActivityMergesXml(xml, options);
 
-  // Normalizar referencias de celda en el rango copiado
-  xml = normalizeCellRefsInRowsXml(xml, options.targetStart, options.sourceEnd + rowDelta);
-
-  // Actualizar el número de la actividad
+  // Paso 4: Actualizar número y nombre de la nueva actividad
   xml = setXmlCell(xml, options.targetStart + 1, options.numberCol, options.newNumber, 'number');
-
-  // Actualizar el nombre de la actividad
   xml = setXmlCell(xml, options.targetStart + 1, options.nameValueCol, options.nombreActividad || null, 'text');
-
-  // Marcar incluida/excluida
   xml = setXmlCell(
     xml,
     options.targetStart + options.includedRowOffset,
@@ -1811,17 +1824,76 @@ function copyActivityBlockXml(sheetXml, options) {
     'text'
   );
 
-  // Limpiar celdas de entrada de notas (dejar vacías para que el usuario ingrese nuevas notas)
+  // Paso 5: Borrar celdas de notas de estudiantes en el destino
   xml = clearActivityStudentInputCellsXml(xml, {
     startRow: options.targetStart + options.firstStudentRowOffset,
     rowCount: options.notesToClear,
     ranges: [
-      { startCol: options.typeStartCol + 2, endCol: options.typeStartCol + 3 },
-      { startCol: options.noteCol, endCol: options.typeEndCol }
+      { startCol: typeStartCol + 2, endCol: typeStartCol + 3 },
+      { startCol: options.noteCol, endCol: typeEndCol }
     ]
   });
 
   return xml;
+}
+
+function extractAndAdjustCells(sourceRowXml, opts) {
+  // Extrae las celdas en el rango de columnas y las ajusta al número de fila destino
+  const cells = [];
+  const cellRegex = /<c\b[^>]*(?:\/>|>[\s\S]*?<\/c>)/g;
+  let m;
+
+  while ((m = cellRegex.exec(sourceRowXml)) !== null) {
+    const cellXml = m[0];
+    const ref = getXmlAttribute(cellXml, 'r');
+    if (!ref) continue;
+
+    const colName = ref.replace(/\d+$/, '');
+    const colIdx = columnIndex(colName);
+    if (colIdx < opts.colStart || colIdx > opts.colEnd) continue;
+
+    // Actualizar referencia de celda al número de fila destino
+    let adjusted = cellXml.replace(`r="${ref}"`, `r="${colName}${opts.dstRow}"`);
+
+    // Ajustar fórmulas: desplazar referencias de fila que están dentro del bloque fuente
+    adjusted = adjusted.replace(/(<f\b[^>]*>)([\s\S]*?)(<\/f>)/g, (_match, open, formula, close) => {
+      const newOpen = shiftFormulaRefAttribute(open, opts.rowDelta, opts.srcRowStart, opts.srcRowEnd);
+      const newFormula = shiftFormulaRows(formula, opts.rowDelta, opts.srcRowStart, opts.srcRowEnd);
+      return `${newOpen}${newFormula}${close}`;
+    });
+
+    cells.push(adjusted);
+  }
+
+  return cells;
+}
+
+function pasteRangeCells(sheetXml, dstRow, cells, colStart, colEnd) {
+  // Busca la fila destino, borra el rango de columnas y luego inserta las nuevas celdas
+  let targetRowXml = getXmlRow(sheetXml, dstRow);
+
+  if (!targetRowXml) {
+    // La fila no existe (puede pasar si estaba totalmente vacía en el XML)
+    const newRow = `<row r="${dstRow}">${cells.join('')}</row>`;
+    return insertXmlRowXml(sheetXml, newRow);
+  }
+
+  // Eliminar celdas existentes en el rango de columnas
+  let updatedRow = targetRowXml.replace(/<c\b[^>]*(?:\/>|>[\s\S]*?<\/c>)/g, (cellXml) => {
+    const ref = getXmlAttribute(cellXml, 'r');
+    if (!ref) return cellXml;
+    const colIdx = columnIndex(ref.replace(/\d+$/, ''));
+    return (colIdx >= colStart && colIdx <= colEnd) ? '' : cellXml;
+  });
+
+  // Insertar las nuevas celdas en orden
+  for (const cell of cells) {
+    const ref = getXmlAttribute(cell, 'r');
+    if (!ref) continue;
+    updatedRow = insertXmlCellInRow(updatedRow, cell, columnIndex(ref.replace(/\d+$/, '')));
+  }
+
+  return sheetXml.replace(targetRowXml, updatedRow);
 }
 
 function normalizeCellRefsInRowsXml(sheetXml, startRowIdx, endRowIdx) {
@@ -1972,77 +2044,6 @@ function removeXmlCellsInColRange(rowXml, startCol, endCol) {
     const colIdx = columnIndex(cellRef.replace(/\d+$/, ''));
     return colIdx >= startCol && colIdx <= endCol ? '' : cellXml;
   });
-}
-
-function cloneActivityRangeCells(sourceRowXml, targetRowNumber, options) {
-  // Clonar SOLO las celdas dentro del rango de la actividad (typeStartCol a typeEndCol)
-  const cells = [];
-  const cellRegex = /<c\b[^>]*(?:\/>|>[\s\S]*?<\/c>)/g;
-  let cellMatch;
-  const rowDelta = options.targetStart - options.sourceStart;
-  const sourceStartRowNumber = options.sourceStart + 1;
-  const sourceEndRowNumber = options.sourceEnd + 1;
-
-  while ((cellMatch = cellRegex.exec(sourceRowXml)) !== null) {
-    const cellXml = cellMatch[0];
-    const cellRef = getXmlAttribute(cellXml, 'r');
-
-    if (!cellRef) {
-      continue;
-    }
-
-    const colIdx = columnIndex(cellRef.replace(/\d+$/, ''));
-
-    // Solo copiar celdas dentro del rango de la actividad
-    if (colIdx < options.typeStartCol || colIdx > options.typeEndCol) {
-      continue;
-    }
-
-    // Clonar la celda ajustando número de fila y fórmulas
-    const clonedCell = cloneXmlCell(cellXml, targetRowNumber, rowDelta, sourceStartRowNumber, sourceEndRowNumber);
-    cells.push(clonedCell);
-  }
-
-  return cells;
-}
-
-function upsertActivityRowCells(sheetXml, targetRowNumber, clonedCells, options) {
-  const targetRow = getXmlRow(sheetXml, targetRowNumber);
-
-  if (!targetRow) {
-    const newRow = buildActivityRowFromCells(targetRowNumber, clonedCells);
-    return insertXmlRowXml(sheetXml, newRow);
-  }
-
-  // Primero eliminar todas las celdas del rango de la actividad en la fila destino
-  // para no dejar celdas duplicadas o sobrantes
-  let updatedRow = targetRow.replace(/<c\b[^>]*(?:\/>|>[\s\S]*?<\/c>)/g, (cellXml) => {
-    const cellRef = getXmlAttribute(cellXml, 'r');
-    if (!cellRef) return cellXml;
-    const colIdx = columnIndex(cellRef.replace(/\d+$/, ''));
-    if (colIdx >= options.typeStartCol && colIdx <= options.typeEndCol) {
-      return '';
-    }
-    return cellXml;
-  });
-
-  // Luego insertar las celdas clonadas en orden
-  for (const clonedCell of clonedCells) {
-    const cellRef = getXmlAttribute(clonedCell, 'r');
-    if (!cellRef) continue;
-    const colName = cellRef.replace(/\d+$/, '');
-    updatedRow = insertXmlCellInRow(updatedRow, clonedCell, columnIndex(colName));
-  }
-
-  return sheetXml.replace(targetRow, updatedRow);
-}
-
-function buildActivityRowFromCells(rowNumber, cells) {
-  // Construir una fila XML a partir de un conjunto de celdas
-  const openTag = `<row r="${rowNumber}">`;
-  const closeTag = '</row>';
-  const cellsXml = cells.join('');
-  return `${openTag}${cellsXml}${closeTag}`;
 }
 
 function upsertFullXmlRow(sheetXml, newRowXml, targetRowNumber) {
