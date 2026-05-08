@@ -496,7 +496,7 @@ function loadRraaCriteriosFromSelectedFile() {
 }
 
 function loadNotasActividadFromSelectedFile(unidad = 'U1', tipo = 'practicas', actividad = 1) {
-  const workbook = XLSX.readFile(selectedExcelPath, { cellDates: true });
+  const workbook = XLSX.readFile(selectedExcelPath, { cellDates: true, cellFormula: false, cellHTML: false, cellNF: false });
   const unidades = listUnitSheets(workbook);
   const selectedUnidad = unidades.find((item) => item.codigo === unidad)?.codigo || unidades[0]?.codigo || unidad;
 
@@ -570,7 +570,7 @@ async function saveNotasActividadToFile(filePath, unidad, tipo, actividad, notas
 
 function loadNotasEvaluacionFromSelectedFile(evaluacion = '1') {
   // Reutiliza workbook si ya está en caché (evita releer el Excel completo)
-  const workbook = getCachedWorkbook(selectedExcelPath, { cellDates: true, cellFormula: true });
+  const workbook = getCachedWorkbook(selectedExcelPath, { cellDates: true, cellFormula: false, cellHTML: false, cellNF: false });
   const sheetName = findEvaluationSheetName(workbook, evaluacion);
 
   if (!sheetName) {
