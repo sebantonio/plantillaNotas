@@ -312,6 +312,15 @@ ipcMain.handle('excel:getAlumnosInformes', async () => {
   return result.alumnos.map((a) => a.nombre);
 });
 
+ipcMain.handle('excel:setSelectedFile', async (_event, filePath) => {
+  if (!filePath) throw new Error('No se especificó ningún archivo.');
+  if (!fs.existsSync(filePath)) throw new Error('El archivo no existe: ' + filePath);
+  selectedExcelPath = filePath;
+  invalidateWorkbookCache();
+  clearEvaluationsCache();
+  return { filePath, fileName: path.basename(filePath) };
+});
+
 ipcMain.handle('app:openExternal', async (_event, url) => {
   await shell.openExternal(url);
 });
