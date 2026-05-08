@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('electronExcel', {
     return ipcRenderer.invoke('excel:saveRraaCriterios', payload);
   },
   getNotasActividad: (payload) => ipcRenderer.invoke('excel:getNotasActividad', payload),
+  getNotasActividadesTipo: (payload) => ipcRenderer.invoke('excel:getNotasActividadesTipo', payload),
   saveNotasActividad: (payload) => ipcRenderer.invoke('excel:saveNotasActividad', payload),
   addActividad: (payload) => ipcRenderer.invoke('excel:addActividad', payload),
   getNotasEvaluacion: (payload) => ipcRenderer.invoke('excel:getNotasEvaluacion', payload),

@@ -497,9 +497,9 @@
                 typeCache.set(`${state.unidad}:${state.tipo}`, state);
                 renderControls(state);
                 renderAll();
-                showMessage("Primera actividad cargada. Leyendo el resto en segundo plano...", "info");
+                showMessage("Primera actividad cargada. Leyendo el tipo completo...", "info");
                 setDisabled(false);
-                loadRemainingActivitiesInBackground(firstData, token);
+                loadTypeBatchInBackground(firstData, token);
             } catch (error) {
                 showMessage(error.message || "No se pudieron cargar las actividades.", "error");
             } finally {
@@ -514,48 +514,24 @@
             renderTypeSelect(data.tipos || [], data.tipo);
         }
 
-        async function loadRemainingActivitiesInBackground(firstData, token) {
-            const blocks = firstData.actividades || [];
-            const total = blocks.length;
-            let loaded = state && state.activities ? state.activities.length : 0;
+        async function loadTypeBatchInBackground(firstData, token) {
+            try {
+                const data = await window.electronExcel.getNotasActividadesTipo({
+                    unidad: firstData.unidad,
+                    tipo: firstData.tipo
+                });
 
-            for (const block of blocks) {
-                if (token !== loadToken) {
+                if (token !== loadToken || !data) {
                     return;
                 }
 
-                if (Number(block.numero) === Number(firstData.actividad)) {
-                    continue;
-                }
-
-                try {
-                    const data = await window.electronExcel.getNotasActividad({
-                        unidad: firstData.unidad,
-                        tipo: firstData.tipo,
-                        actividad: block.numero
-                    });
-
-                    if (token !== loadToken || !state || state.unidad !== firstData.unidad || state.tipo !== firstData.tipo) {
-                        return;
-                    }
-
-                    const activity = buildActivityFromData(data, block);
-                    if (activity) {
-                        state.activities.push(activity);
-                        state.activities.sort((a, b) => Number(a.numero) - Number(b.numero));
-                        state.alumnos = buildStudents(state.activities);
-                        typeCache.set(`${state.unidad}:${state.tipo}`, state);
-                        loaded = state.activities.length;
-                        renderAll();
-                        showMessage(`Cargando actividades ${loaded}/${total}...`, "info");
-                    }
-                } catch (_error) {
-                    // Si una actividad falla, seguimos con las demas para no bloquear la vista.
-                }
-            }
-
-            if (token === loadToken) {
+                state = buildTypeStateFromActivities(data, data.activities || []);
+                typeCache.set(`${state.unidad}:${state.tipo}`, state);
+                renderControls(state);
+                renderAll();
                 showMessage("Notas del tipo seleccionado cargadas.", "success");
+            } catch (error) {
+                showMessage(error.message || "No se pudo cargar el tipo completo.", "error");
             }
         }
 

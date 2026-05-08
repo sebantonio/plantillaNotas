@@ -242,6 +242,21 @@ ipcMain.handle('excel:getNotasActividad', async (_event, payload = {}) => {
   );
 });
 
+ipcMain.handle('excel:getNotasActividadesTipo', async (_event, payload = {}) => {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  if (!selectedExcelPath) {
+    return null;
+  }
+
+  return loadNotasActividadesTipoFromSelectedFile(
+    payload.unidad || 'U1',
+    payload.tipo || 'practicas'
+  );
+});
+
 ipcMain.handle('excel:saveNotasActividad', async (_event, payload) => {
   if (!selectedExcelPath) {
     selectedExcelPath = findDefaultExcelPath();
@@ -581,6 +596,46 @@ function loadNotasActividadFromSelectedFile(unidad = 'U1', tipo = 'practicas', a
     actividades: blocks.map(formatActivityBlock),
     notas,
     block: selectedBlock ? formatActivityBlock(selectedBlock) : null
+  };
+}
+
+function loadNotasActividadesTipoFromSelectedFile(unidad = 'U1', tipo = 'practicas') {
+  const workbook = XLSX.readFile(selectedExcelPath, { cellDates: true, cellFormula: false, cellHTML: false, cellNF: false });
+  const unidades = listUnitSheets(workbook);
+  const selectedUnidad = unidades.find((item) => item.codigo === unidad)?.codigo || unidades[0]?.codigo || unidad;
+
+  if (!workbook.SheetNames.includes(selectedUnidad)) {
+    throw new Error(`El archivo no tiene la hoja "${selectedUnidad}".`);
+  }
+
+  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[selectedUnidad], { header: 1, defval: null });
+  const selectedType = getActivityType(tipo);
+  const blocks = findActivityBlocks(rows, selectedType.key);
+  const activities = blocks.map((block) => ({
+    ...formatActivityBlock(block),
+    tipo: selectedType.key,
+    tipoLabel: selectedType.label,
+    notas: extractActivityNotes(rows, block)
+  }));
+  const tipos = ACTIVITY_TYPES.map((item) => {
+    const typeBlocks = findActivityBlocks(rows, item.key).map(formatActivityBlock);
+    return {
+      key: item.key,
+      label: item.label,
+      actividades: typeBlocks,
+      incluidas: typeBlocks.filter((block) => block.incluida).length,
+      total: typeBlocks.length
+    };
+  });
+
+  return {
+    filePath: selectedExcelPath,
+    fileName: path.basename(selectedExcelPath),
+    unidad: selectedUnidad,
+    unidades,
+    tipo: selectedType.key,
+    tipos,
+    activities
   };
 }
 
@@ -2562,6 +2617,16 @@ async function commandGetNotasActividad(payload = {}) {
     : null;
 }
 
+async function commandGetNotasActividadesTipo(payload = {}) {
+  if (!selectedExcelPath) {
+    selectedExcelPath = findDefaultExcelPath();
+  }
+
+  return selectedExcelPath
+    ? loadNotasActividadesTipoFromSelectedFile(payload.unidad || 'U1', payload.tipo || 'practicas')
+    : null;
+}
+
 async function commandSaveNotasActividad(payload) {
   if (!selectedExcelPath) {
     selectedExcelPath = findDefaultExcelPath();
@@ -2659,6 +2724,7 @@ module.exports = {
     getRraaCriterios: commandGetRraaCriterios,
     saveRraaCriterios: commandSaveRraaCriterios,
     getNotasActividad: commandGetNotasActividad,
+    getNotasActividadesTipo: commandGetNotasActividadesTipo,
     saveNotasActividad: commandSaveNotasActividad,
     addActividad: commandAddActividad,
     getNotasEvaluacion: commandGetNotasEvaluacion,

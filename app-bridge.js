@@ -25,6 +25,7 @@
       return invoke("excel_save_rraa_criterios", { payload });
     },
     getNotasActividad: (payload) => invoke("excel_get_notas_actividad", { payload }),
+    getNotasActividadesTipo: (payload) => invoke("excel_get_notas_actividades_tipo", { payload }),
     saveNotasActividad: (payload) => invoke("excel_save_notas_actividad", { payload }),
     addActividad: (payload) => invoke("excel_add_actividad", { payload }),
     getNotasEvaluacion: (payload) => invoke("excel_get_notas_evaluacion", { payload }),
