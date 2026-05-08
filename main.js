@@ -1841,13 +1841,12 @@ function copyActivityBlockXml(sheetXml, options) {
     'text'
   );
 
-  // Paso 5: Poner notas de estudiantes a 0 en el destino (no se copian)
+  // Paso 5: Poner a 0 solo la columna NOTA FINAL (CCEE y RA son fórmulas, no se tocan)
   xml = clearActivityStudentInputCellsXml(xml, {
     startRow: options.targetStart + options.firstStudentRowOffset,
     rowCount: options.notesToClear,
     ranges: [
-      { startCol: typeStartCol + 2, endCol: typeStartCol + 3 },
-      { startCol: options.noteCol, endCol: typeEndCol }
+      { startCol: options.noteCol, endCol: options.noteCol }
     ]
   });
 
