@@ -33,6 +33,30 @@ const _evaluationsCache = new Map();
 function clearEvaluationsCache() {
   _evaluationsCache.clear();
 }
+
+const _activityTypeCache = new Map();
+
+function getFileMtimeMs(filePath) {
+  try {
+    return fs.statSync(filePath).mtimeMs;
+  } catch (_error) {
+    return 0;
+  }
+}
+
+function getActivityTypeCacheKey(filePath, unidad, tipo) {
+  return `${filePath}::${getFileMtimeMs(filePath)}::${unidad}::${tipo}`;
+}
+
+function clearActivityTypeCache() {
+  _activityTypeCache.clear();
+}
+
+function clearDataCaches() {
+  invalidateWorkbookCache();
+  clearEvaluationsCache();
+  clearActivityTypeCache();
+}
 const defaultExcelName = 'plantilla313_dual - copia.xlsx';
 const ACTIVITY_TYPES = [
   { key: 'practicas', label: 'Practicas', baseCol: 0 },
@@ -603,13 +627,18 @@ function loadNotasActividadesTipoFromSelectedFile(unidad = 'U1', tipo = 'practic
   const workbook = XLSX.readFile(selectedExcelPath, { cellDates: true, cellFormula: false, cellHTML: false, cellNF: false });
   const unidades = listUnitSheets(workbook);
   const selectedUnidad = unidades.find((item) => item.codigo === unidad)?.codigo || unidades[0]?.codigo || unidad;
+  const selectedType = getActivityType(tipo);
+  const cacheKey = getActivityTypeCacheKey(selectedExcelPath, selectedUnidad, selectedType.key);
+
+  if (_activityTypeCache.has(cacheKey)) {
+    return _activityTypeCache.get(cacheKey);
+  }
 
   if (!workbook.SheetNames.includes(selectedUnidad)) {
     throw new Error(`El archivo no tiene la hoja "${selectedUnidad}".`);
   }
 
   const rows = XLSX.utils.sheet_to_json(workbook.Sheets[selectedUnidad], { header: 1, defval: null });
-  const selectedType = getActivityType(tipo);
   const blocks = findActivityBlocks(rows, selectedType.key);
   const activities = blocks.map((block) => ({
     ...formatActivityBlock(block),
@@ -628,7 +657,7 @@ function loadNotasActividadesTipoFromSelectedFile(unidad = 'U1', tipo = 'practic
     };
   });
 
-  return {
+  const result = {
     filePath: selectedExcelPath,
     fileName: path.basename(selectedExcelPath),
     unidad: selectedUnidad,
@@ -637,6 +666,9 @@ function loadNotasActividadesTipoFromSelectedFile(unidad = 'U1', tipo = 'practic
     tipos,
     activities
   };
+
+  _activityTypeCache.set(cacheKey, result);
+  return result;
 }
 
 async function saveNotasActividadToFile(filePath, unidad, tipo, actividad, notas, metadata = {}) {
@@ -1605,7 +1637,7 @@ async function editWorkbookSheetsXml(filePath, sheetEdits) {
   });
 
   fs.writeFileSync(filePath, output);
-  invalidateWorkbookCache();
+  clearDataCaches();
 }
 
 function assertWorksheetXmlLooksSafe(sheetXml, sheetName) {
