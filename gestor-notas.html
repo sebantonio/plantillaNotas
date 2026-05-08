@@ -214,6 +214,22 @@
             font-size: 1.1em;
         }
 
+        .summary-item.warning {
+            border-left-color: #f59e0b;
+        }
+
+        .summary-item.warning strong {
+            color: #b45309;
+        }
+
+        .summary-item.danger {
+            border-left-color: #dc2626;
+        }
+
+        .summary-item.danger strong {
+            color: #b91c1c;
+        }
+
         .table-container {
             overflow-x: auto;
             border: 1px solid #e0e0e0;
@@ -262,6 +278,28 @@
             max-width: 110px;
             min-height: 38px;
             text-align: center;
+        }
+
+        .nota-input.invalid {
+            color: #991b1b;
+            background: #fff1f2;
+            border-color: #dc2626;
+            box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+        }
+
+        tr.pending-note td {
+            background: #fffbeb;
+        }
+
+        tr.invalid-note td {
+            background: #fff1f2;
+        }
+
+        .note-help {
+            display: block;
+            margin-top: 4px;
+            color: #991b1b;
+            font-size: 0.78em;
         }
 
         .empty {
@@ -332,6 +370,18 @@
                     <span>Alumnos</span>
                     <strong id="studentCount">0</strong>
                 </div>
+                <div class="summary-item">
+                    <span>Con nota</span>
+                    <strong id="gradedCount">0</strong>
+                </div>
+                <div class="summary-item warning">
+                    <span>Pendientes</span>
+                    <strong id="pendingCount">0</strong>
+                </div>
+                <div class="summary-item danger">
+                    <span>Errores</span>
+                    <strong id="invalidCount">0</strong>
+                </div>
             </section>
 
             <section>
@@ -375,6 +425,9 @@
         const fileName = document.getElementById("fileName");
         const activityName = document.getElementById("activityName");
         const studentCount = document.getElementById("studentCount");
+        const gradedCount = document.getElementById("gradedCount");
+        const pendingCount = document.getElementById("pendingCount");
+        const invalidCount = document.getElementById("invalidCount");
         const saveButton = document.getElementById("saveButton");
         const reloadButton = document.getElementById("reloadButton");
         const clearButton = document.getElementById("clearButton");
@@ -401,9 +454,29 @@
                     const rowIdx = Array.from(notasBody.children).indexOf(row);
                     if (rowIdx >= 0 && currentNotes[rowIdx]) {
                         currentNotes[rowIdx].nota = input.value;
+                        updateNoteValidation(rowIdx, input);
+                        renderSummary(currentState);
                         marcarCambio();
                     }
                 }
+            });
+
+            notasBody.addEventListener("paste", (event) => {
+                const input = event.target;
+                if (!input.classList.contains("nota-input")) {
+                    return;
+                }
+
+                const pastedText = event.clipboardData && event.clipboardData.getData("text");
+                const pastedValues = parsePastedGrades(pastedText);
+                if (pastedValues.length <= 1) {
+                    return;
+                }
+
+                event.preventDefault();
+                const row = input.closest("tr");
+                const startIdx = Array.from(notasBody.children).indexOf(row);
+                applyPastedGrades(startIdx, pastedValues);
             });
 
             loadNotas();
@@ -504,7 +577,11 @@
             fileName.textContent = data.fileName || "-";
             const type = (data.tipos || []).find((item) => item.key === data.tipo);
             activityName.textContent = `${data.unidad} - ${type ? type.label : data.tipo} ${data.actividad}`;
-            studentCount.textContent = currentNotes.length;
+            const stats = getNotesStats();
+            studentCount.textContent = stats.total;
+            gradedCount.textContent = stats.graded;
+            pendingCount.textContent = stats.pending;
+            invalidCount.textContent = stats.invalid;
         }
 
         function renderTable() {
@@ -516,18 +593,22 @@
             // Usar DocumentFragment para batch de reflows
             const fragment = document.createDocumentFragment();
             currentNotes.forEach((item, idx) => {
+                const validation = validateGrade(item.nota);
                 const row = document.createElement("tr");
+                row.className = validation.isInvalid ? "invalid-note" : validation.isEmpty ? "pending-note" : "";
                 row.innerHTML = `
                     <td class="numero">${item.numero || idx + 1}</td>
                     <td>${escapeHtml(item.nombre)}</td>
                     <td>
                         <input
-                            class="nota-input"
+                            class="nota-input${validation.isInvalid ? " invalid" : ""}"
                             type="text"
                             inputmode="decimal"
                             value="${escapeHtml(item.nota || "")}"
+                            title="${validation.message ? escapeHtml(validation.message) : "Pega una columna de Excel aqui para rellenar hacia abajo"}"
                             aria-label="Nota de ${escapeHtml(item.nombre)}"
                         >
+                        ${validation.message ? `<span class="note-help">${escapeHtml(validation.message)}</span>` : ""}
                     </td>
                 `;
                 fragment.appendChild(row);
@@ -541,6 +622,14 @@
         async function saveNotas(options = {}) {
             if (!currentState) {
                 return true;
+            }
+
+            const stats = getNotesStats();
+            if (stats.invalid > 0) {
+                renderSummary(currentState);
+                renderTable();
+                showMessage(`Hay ${stats.invalid} nota(s) invalida(s). Corrigelas antes de guardar.`, "error");
+                return false;
             }
 
             try {
@@ -578,8 +667,100 @@
 
         function clearNotas() {
             currentNotes = currentNotes.map((item) => ({ ...item, nota: "" }));
+            renderSummary(currentState);
             renderTable();
             marcarCambio();
+        }
+
+        function parsePastedGrades(text) {
+            return String(text || "")
+                .replace(/\r/g, "")
+                .split("\n")
+                .map((line) => line.split("\t")[0].trim())
+                .filter((value, idx, values) => value !== "" || idx < values.length - 1);
+        }
+
+        function applyPastedGrades(startIdx, values) {
+            if (startIdx < 0 || !values.length) {
+                return;
+            }
+
+            let applied = 0;
+            values.forEach((value, offset) => {
+                const noteIdx = startIdx + offset;
+                if (!currentNotes[noteIdx]) {
+                    return;
+                }
+                currentNotes[noteIdx].nota = value;
+                applied += 1;
+            });
+
+            renderSummary(currentState);
+            renderTable();
+            marcarCambio();
+            showMessage(`Pegadas ${applied} nota(s). Revisa los errores marcados antes de guardar.`, "info");
+
+            const nextInput = notasBody.querySelectorAll(".nota-input")[startIdx + applied - 1];
+            if (nextInput) {
+                nextInput.focus();
+                nextInput.select();
+            }
+        }
+
+        function getNotesStats() {
+            return currentNotes.reduce((stats, item) => {
+                const validation = validateGrade(item.nota);
+                stats.total += 1;
+                if (validation.isInvalid) {
+                    stats.invalid += 1;
+                } else if (validation.isEmpty) {
+                    stats.pending += 1;
+                } else {
+                    stats.graded += 1;
+                }
+                return stats;
+            }, { total: 0, graded: 0, pending: 0, invalid: 0 });
+        }
+
+        function updateNoteValidation(rowIdx, input) {
+            const validation = validateGrade(input.value);
+            const row = input.closest("tr");
+            const cell = input.closest("td");
+            const previousHelp = cell.querySelector(".note-help");
+
+            input.classList.toggle("invalid", validation.isInvalid);
+            input.title = validation.message || "Pega una columna de Excel aqui para rellenar hacia abajo";
+            row.classList.toggle("invalid-note", validation.isInvalid);
+            row.classList.toggle("pending-note", validation.isEmpty && !validation.isInvalid);
+
+            if (previousHelp) {
+                previousHelp.remove();
+            }
+
+            if (validation.message) {
+                const help = document.createElement("span");
+                help.className = "note-help";
+                help.textContent = validation.message;
+                cell.appendChild(help);
+            }
+        }
+
+        function validateGrade(value) {
+            const raw = String(value ?? "").trim();
+            if (raw === "") {
+                return { isEmpty: true, isInvalid: false, message: "" };
+            }
+
+            if (!/^\d{1,2}([,.]\d{1,2})?$/.test(raw)) {
+                return { isEmpty: false, isInvalid: true, message: "Usa un numero de 0 a 10" };
+            }
+
+            const numeric = Number(raw.replace(",", "."));
+            if (Number.isNaN(numeric) || numeric < 0 || numeric > 10) {
+                return { isEmpty: false, isInvalid: true, message: "La nota debe estar entre 0 y 10" };
+            }
+
+            return { isEmpty: false, isInvalid: false, message: "" };
         }
 
         function marcarCambio() {
