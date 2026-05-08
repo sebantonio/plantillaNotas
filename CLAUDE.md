@@ -154,13 +154,18 @@ excel_invoke_command        // Router a tauri-node-backend.js
 ## Cambios Recientes (2026-05-08 - 2026-05-09)
 
 ### Commits
-- **8aa340f**: reparado error que borraba hoja (+71 -6 main.js)
-  - Fix crítico: validación XML + normalización cell refs en copia de actividades
-  - Previene corrupción de archivos al guardar
+- **bceb864**: ui mejorar pantalla de inicio con iconos emoji (+45 -16)
+  - Reemplazar letras por emojis: 📝 👁️ ➕ 📊 (acciones)
+  - Emojis en pasos: 👥 ⚖️ 📚 ✅
+  - Animaciones hover mejoradas
+  - Backgrounds de color suave por tipo
 - **4712967**: fix copiar headers completos de memorias al añadir actividad (+7 -3)
   - Soluciona error de reparación Excel
   - Headers de memorias/otros/controles se copian completamente
   - Diferencia entre filas de cabecera vs estudiantes
+- **8aa340f**: reparado error que borraba hoja (+71 -6 main.js)
+  - Fix crítico: validación XML + normalización cell refs en copia de actividades
+  - Previene corrupción de archivos al guardar
 - **9271e96**: incluida opcion añadir actividad
 - **69ba757**: creado añadir actividad
 - **2c80aae**: añadidonombre actividad
