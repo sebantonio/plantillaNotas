@@ -203,23 +203,44 @@
         }
 
         .action-icon {
-            width: 42px;
-            height: 42px;
+            width: 48px;
+            height: 48px;
             display: grid;
             place-items: center;
-            color: #ffffff;
-            background: var(--primary);
-            border-radius: 8px;
-            font-size: 1.35rem;
+            background: rgba(37, 99, 235, 0.1);
+            border-radius: 10px;
+            font-size: 1.75rem;
             font-weight: 800;
+            transition: transform 0.18s ease, background 0.18s ease;
+        }
+
+        .action-card:hover .action-icon {
+            transform: scale(1.1);
+            background: rgba(37, 99, 235, 0.18);
         }
 
         .action-card:nth-child(2) .action-icon {
-            background: var(--warning);
+            background: rgba(180, 83, 9, 0.1);
+        }
+
+        .action-card:nth-child(2):hover .action-icon {
+            background: rgba(180, 83, 9, 0.18);
+        }
+
+        .action-card:nth-child(3) .action-icon {
+            background: rgba(34, 197, 94, 0.1);
+        }
+
+        .action-card:nth-child(3):hover .action-icon {
+            background: rgba(34, 197, 94, 0.18);
         }
 
         .action-card:nth-child(4) .action-icon {
-            background: var(--accent);
+            background: rgba(15, 118, 110, 0.1);
+        }
+
+        .action-card:nth-child(4):hover .action-icon {
+            background: rgba(15, 118, 110, 0.18);
         }
 
         .action-card strong {
@@ -392,6 +413,14 @@
             font-size: 0.82rem;
             font-weight: 900;
             margin-bottom: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 32px;
+            height: 32px;
+            background: rgba(37, 99, 235, 0.1);
+            border-radius: 8px;
+            font-size: 1.2rem;
         }
 
         .step h3 {
@@ -504,7 +533,7 @@
                         class="action-card"
                         href="gestor-notas.html"
                     >
-                        <div class="action-icon">N</div>
+                        <div class="action-icon">📝</div>
                         <div>
                             <strong>Añadir notas</strong>
                             <span>Registra la nota final de las actividades por unidad.</span>
@@ -515,7 +544,7 @@
                         class="action-card"
                         href="visor-notas.html"
                     >
-                        <div class="action-icon">V</div>
+                        <div class="action-icon">👁️</div>
                         <div>
                             <strong>Ver notas</strong>
                             <span>Consulta notas finales, RRAA y criterios por alumno.</span>
@@ -526,7 +555,7 @@
                         class="action-card"
                         href="incluir-actividad.html"
                     >
-                        <div class="action-icon">A</div>
+                        <div class="action-icon">➕</div>
                         <div>
                             <strong>Añadir actividades</strong>
                             <span>Crea o revisa las actividades evaluables del trimestre.</span>
@@ -537,7 +566,7 @@
                         class="action-card"
                         href="informes.html"
                     >
-                        <div class="action-icon">I</div>
+                        <div class="action-icon">📊</div>
                         <div>
                             <strong>Informes</strong>
                             <span>Genera informes, gráficos de evolución y vistas imprimibles.</span>
@@ -580,25 +609,25 @@
 
             <div class="workflow" aria-label="Flujo recomendado">
                 <div class="step">
-                    <div class="step-number">01</div>
+                    <div class="step-number">👥</div>
                     <h3>Preparar alumnos</h3>
                     <p>Carga o actualiza la lista del grupo al principio del curso.</p>
                     <a class="small-button" href="gestor-alumnos.html">Alumnos</a>
                 </div>
                 <div class="step">
-                    <div class="step-number">02</div>
+                    <div class="step-number">⚖️</div>
                     <h3>Ajustar RRAA y CE</h3>
                     <p>Revisa criterios, resultados de aprendizaje y ponderaciones.</p>
                     <a class="small-button" href="gestor-rraa-criterios.html">RRAA y CE</a>
                 </div>
                 <div class="step">
-                    <div class="step-number">03</div>
+                    <div class="step-number">📚</div>
                     <h3>Planificar unidades</h3>
                     <p>Ordena la programación al inicio y ajusta solo cambios puntuales.</p>
                     <a class="small-button" href="gestor-unidades.html">Unidades</a>
                 </div>
                 <div class="step">
-                    <div class="step-number">04</div>
+                    <div class="step-number">✅</div>
                     <h3>Evaluar actividades</h3>
                     <p>Registra notas de forma continuada durante el trimestre.</p>
                 </div>
