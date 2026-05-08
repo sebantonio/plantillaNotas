@@ -397,6 +397,7 @@
 
         let state = null;
         const typeCache = new Map();
+        let loadToken = 0;
 
         const messageBox = document.getElementById("message");
         const unidadSelect = document.getElementById("unidadSelect");
@@ -466,6 +467,7 @@
             const unidad = unidadSelect.value || "U1";
             const tipo = tipoSelect.value || "practicas";
             const cacheKey = `${unidad}:${tipo}`;
+            const token = ++loadToken;
 
             try {
                 setDisabled(true);
@@ -477,7 +479,7 @@
                     return;
                 }
 
-                showMessage("Leyendo actividades del tipo seleccionado...", "info");
+                showMessage("Leyendo primera actividad del tipo seleccionado...", "info");
                 const firstData = await window.electronExcel.getNotasActividad({
                     unidad: options.seed ? options.seed.unidad : unidad,
                     tipo: options.seed ? options.seed.tipo : tipo,
@@ -489,16 +491,21 @@
                     return;
                 }
 
-                const activities = await loadActivitiesForType(firstData);
+                const firstActivity = buildActivityFromData(firstData);
+                const activities = firstActivity ? [firstActivity] : [];
                 state = buildTypeStateFromActivities(firstData, activities);
                 typeCache.set(`${state.unidad}:${state.tipo}`, state);
                 renderControls(state);
                 renderAll();
-                showMessage("Notas del tipo seleccionado cargadas.", "success");
+                showMessage("Primera actividad cargada. Leyendo el resto en segundo plano...", "info");
+                setDisabled(false);
+                loadRemainingActivitiesInBackground(firstData, token);
             } catch (error) {
                 showMessage(error.message || "No se pudieron cargar las actividades.", "error");
             } finally {
-                setDisabled(false);
+                if (token === loadToken) {
+                    setDisabled(false);
+                }
             }
         }
 
@@ -507,32 +514,66 @@
             renderTypeSelect(data.tipos || [], data.tipo);
         }
 
-        async function loadActivitiesForType(firstData) {
+        async function loadRemainingActivitiesInBackground(firstData, token) {
             const blocks = firstData.actividades || [];
-            const activities = [];
+            const total = blocks.length;
+            let loaded = state && state.activities ? state.activities.length : 0;
 
             for (const block of blocks) {
-                let data = firstData;
+                if (token !== loadToken) {
+                    return;
+                }
 
-                if (Number(block.numero) !== Number(firstData.actividad)) {
-                    data = await window.electronExcel.getNotasActividad({
+                if (Number(block.numero) === Number(firstData.actividad)) {
+                    continue;
+                }
+
+                try {
+                    const data = await window.electronExcel.getNotasActividad({
                         unidad: firstData.unidad,
                         tipo: firstData.tipo,
                         actividad: block.numero
                     });
-                }
 
-                activities.push({
-                    tipo: firstData.tipo,
-                    tipoLabel: getTypeLabel(firstData, firstData.tipo),
-                    numero: block.numero,
-                    nombre: block.nombre || "",
-                    incluida: Boolean(block.incluida),
-                    notas: data.notas || []
-                });
+                    if (token !== loadToken || !state || state.unidad !== firstData.unidad || state.tipo !== firstData.tipo) {
+                        return;
+                    }
+
+                    const activity = buildActivityFromData(data, block);
+                    if (activity) {
+                        state.activities.push(activity);
+                        state.activities.sort((a, b) => Number(a.numero) - Number(b.numero));
+                        state.alumnos = buildStudents(state.activities);
+                        typeCache.set(`${state.unidad}:${state.tipo}`, state);
+                        loaded = state.activities.length;
+                        renderAll();
+                        showMessage(`Cargando actividades ${loaded}/${total}...`, "info");
+                    }
+                } catch (_error) {
+                    // Si una actividad falla, seguimos con las demas para no bloquear la vista.
+                }
             }
 
-            return activities;
+            if (token === loadToken) {
+                showMessage("Notas del tipo seleccionado cargadas.", "success");
+            }
+        }
+
+        function buildActivityFromData(data, fallbackBlock = null) {
+            const block = data.block || fallbackBlock;
+
+            if (!block) {
+                return null;
+            }
+
+            return {
+                tipo: data.tipo,
+                tipoLabel: getTypeLabel(data, data.tipo),
+                numero: data.actividad || block.numero,
+                nombre: block.nombre || "",
+                incluida: Boolean(block.incluida),
+                notas: data.notas || []
+            };
         }
 
         function buildTypeStateFromActivities(baseData, activities) {
