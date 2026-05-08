@@ -561,7 +561,7 @@
                 applyPastedGrades(startIdx, pastedValues);
             });
 
-            loadNotas({ isInitial: true });
+            loadNotas();
         });
 
         async function loadNotasConGuardado(options = {}) {
@@ -609,36 +609,10 @@
                 renderActivityMeta(data);
                 renderTable();
                 showMessage("Actividad cargada correctamente.", "success");
-
-                // Precargar el resto de unidades en segundo plano tras la primera carga
-                if (options.isInitial && data.unidades && data.unidades.length > 1) {
-                    preloadOtherUnidades(data.unidades, tipo);
-                }
             } catch (error) {
                 showMessage(error.message || "No se pudieron cargar las notas.", "error");
             } finally {
                 setDisabled(false);
-            }
-        }
-
-        async function preloadOtherUnidades(unidades, tipo) {
-            const currentUnidad = unidadSelect.value || "U1";
-            const otrasUnidades = unidades
-                .map((u) => u.codigo)
-                .filter((codigo) => codigo !== currentUnidad);
-
-            for (const codigo of otrasUnidades) {
-                const key = `${codigo}:${tipo}:1`;
-                if (_notasCache.has(key)) continue;
-
-                try {
-                    const data = await window.electronExcel.getNotasActividad({ unidad: codigo, tipo, actividad: 1 });
-                    if (data) {
-                        _notasCache.set(key, data);
-                    }
-                } catch (_e) {
-                    // Ignorar errores de precarga — se cargará bajo demanda si falla
-                }
             }
         }
 
