@@ -547,25 +547,44 @@ const summaryBody = document.getElementById("summaryBody");
                 state.selectedStudent = studentSelect.value;
                 renderReport();
             });
-            evaluationFocus.addEventListener("change", renderReport);
+            evaluationFocus.addEventListener("change", async () => {
+                const evalValue = evaluationFocus.value;
+                if (!_evaluationsCache.has(evalValue)) {
+                    showMessage("Cargando evaluacion...", "info");
+                    await loadEvaluation(evalValue);
+                    const newStudents = buildStudentList(state.evaluations);
+                    if (newStudents.length !== state.students.length) {
+                        state.students = newStudents;
+                        renderStudentSelect();
+                    }
+                    showMessage("", "");
+                }
+                renderReport();
+            });
 
             loadReports();
         });
 
+        const _evaluationsCache = new Map();
+
+        async function loadEvaluation(value) {
+            const evalConfig = EVALUATIONS.find((e) => e.value === value);
+            const data = await window.electronExcel.getNotasEvaluacion({ evaluacion: value });
+            _evaluationsCache.set(value, { ...evalConfig, data });
+            state.evaluations = EVALUATIONS
+                .filter((e) => _evaluationsCache.has(e.value))
+                .map((e) => _evaluationsCache.get(e.value));
+        }
+
         async function loadReports() {
             try {
-                showMessage("Leyendo evaluaciones del Excel...", "info");
+                _evaluationsCache.clear();
+                const initialEval = evaluationFocus.value || "final";
+                showMessage(`Leyendo evaluacion ${initialEval === "final" ? "Final" : initialEval + " EVA"}...`, "info");
 
-                // Carga en paralelo (antes era secuencial: 6 lecturas × 5s = 30s)
-                const results = await Promise.all(
-                    EVALUATIONS.map(async (evaluation) => {
-                        const data = await window.electronExcel.getNotasEvaluacion({ evaluacion: evaluation.value });
-                        return { ...evaluation, data };
-                    })
-                );
+                await loadEvaluation(initialEval);
 
-                state.evaluations = results;
-                state.students = buildStudentList(results);
+                state.students = buildStudentList(state.evaluations);
 
                 if (!state.students.length) {
                     showMessage("No se encontraron alumnos en las hojas de evaluacion.", "error");
@@ -579,7 +598,7 @@ const summaryBody = document.getElementById("summaryBody");
 
                 renderStudentSelect();
                 renderReport();
-                showMessage("Informes cargados correctamente.", "success");
+                showMessage("Informe cargado. Cambia la evaluacion para ver las demas.", "success");
             } catch (error) {
                 showMessage(error.message || "No se pudieron cargar los informes.", "error");
             }
