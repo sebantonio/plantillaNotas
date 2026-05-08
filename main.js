@@ -1840,7 +1840,7 @@ function copyActivityBlockXml(sheetXml, options) {
 function extractAndAdjustCells(sourceRowXml, opts) {
   // Extrae las celdas en el rango de columnas y las ajusta al número de fila destino
   const cells = [];
-  const cellRegex = /<c\b[^>]*(?:\/>|>[\s\S]*?<\/c>)/g;
+  const cellRegex = /<c\b[^>\/]*(?:\/>|>[\s\S]*?<\/c>)/g;
   let m;
 
   while ((m = cellRegex.exec(sourceRowXml)) !== null) {
@@ -1879,7 +1879,7 @@ function pasteRangeCells(sheetXml, dstRow, cells, colStart, colEnd) {
   }
 
   // Eliminar celdas existentes en el rango de columnas
-  let updatedRow = targetRowXml.replace(/<c\b[^>]*(?:\/>|>[\s\S]*?<\/c>)/g, (cellXml) => {
+  let updatedRow = targetRowXml.replace(/<c\b[^>\/]*(?:\/>|>[\s\S]*?<\/c>)/g, (cellXml) => {
     const ref = getXmlAttribute(cellXml, 'r');
     if (!ref) return cellXml;
     const colIdx = columnIndex(ref.replace(/\d+$/, ''));
@@ -1928,7 +1928,7 @@ function clearActivityStudentInputCellsXml(sheetXml, options) {
       return rowXml;
     }
 
-    return rowXml.replace(/<c\b[^>]*(?:\/>|>[\s\S]*?<\/c>)/g, (cellXml) => {
+    return rowXml.replace(/<c\b[^>\/]*(?:\/>|>[\s\S]*?<\/c>)/g, (cellXml) => {
       const cellRef = getXmlAttribute(cellXml, 'r');
 
       if (!cellRef) {
@@ -1950,7 +1950,7 @@ function getXmlRow(sheetXml, rowNumber) {
 
 function cloneXmlCellsForActivity(rowXml, options) {
   const cells = [];
-  const cellRegex = /<c\b[^>]*(?:\/>|>[\s\S]*?<\/c>)/g;
+  const cellRegex = /<c\b[^>\/]*(?:\/>|>[\s\S]*?<\/c>)/g;
   let cellMatch;
 
   while ((cellMatch = cellRegex.exec(rowXml)) !== null) {
@@ -2034,7 +2034,7 @@ function upsertXmlRowCells(sheetXml, sourceRowXml, targetRowNumber, typeStartCol
 }
 
 function removeXmlCellsInColRange(rowXml, startCol, endCol) {
-  return rowXml.replace(/<c\b[^>]*(?:\/>|>[\s\S]*?<\/c>)/g, (cellXml) => {
+  return rowXml.replace(/<c\b[^>\/]*(?:\/>|>[\s\S]*?<\/c>)/g, (cellXml) => {
     const cellRef = getXmlAttribute(cellXml, 'r');
 
     if (!cellRef) {
@@ -2267,7 +2267,7 @@ function insertXmlRow(sheetXml, rowNumber) {
 }
 
 function insertXmlCellInRow(rowXml, cellXml, colIdx) {
-  const cells = [...rowXml.matchAll(/<c\b[^>]*(?:\/>|>[\s\S]*?<\/c>)/g)];
+  const cells = [...rowXml.matchAll(/<c\b[^>\/]*(?:\/>|>[\s\S]*?<\/c>)/g)];
 
   for (const cell of cells) {
     const cellRef = getXmlAttribute(cell[0], 'r');
