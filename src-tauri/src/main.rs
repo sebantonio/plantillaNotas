@@ -142,6 +142,12 @@ fn excel_set_selected_file(file_path: String) -> Result<Value, String> {
 }
 
 #[tauri::command]
+fn excel_verify_file_exists(file_path: String) -> Result<bool, String> {
+    use std::path::Path;
+    Ok(Path::new(&file_path).exists())
+}
+
+#[tauri::command]
 fn app_open_external(url: String) -> Result<(), String> {
     webbrowser::open(&url).map_err(|error| format!("No se pudo abrir el enlace: {error}"))
 }
@@ -152,6 +158,7 @@ fn main() {
             excel_select_file,
             excel_get_selected_file,
             excel_set_selected_file,
+            excel_verify_file_exists,
             excel_save_alumnos,
             excel_get_unidades,
             excel_save_unidades,

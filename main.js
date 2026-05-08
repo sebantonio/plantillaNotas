@@ -343,6 +343,11 @@ ipcMain.handle('excel:setSelectedFile', async (_event, filePath) => {
   return { filePath, fileName: path.basename(filePath) };
 });
 
+ipcMain.handle('excel:verifyFileExists', async (_event, filePath) => {
+  if (!filePath) return false;
+  return fs.existsSync(filePath);
+});
+
 ipcMain.handle('app:openExternal', async (_event, url) => {
   await shell.openExternal(url);
 });

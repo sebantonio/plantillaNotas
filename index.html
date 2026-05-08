@@ -296,6 +296,7 @@
             border: 1px solid transparent;
             cursor: pointer;
             transition: background 0.15s ease, border-color 0.15s ease;
+            group: 'recent-item';
         }
 
         .recent-item:hover {
@@ -308,6 +309,14 @@
             border-color: rgba(37, 99, 235, 0.3);
         }
 
+        .recent-item-content {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            min-width: 0;
+        }
+
         .recent-item-name {
             font-size: 0.87rem;
             font-weight: 600;
@@ -318,10 +327,66 @@
             min-width: 0;
         }
 
+        .recent-item-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+
+        .recent-item:hover .recent-item-actions {
+            opacity: 1;
+        }
+
         .recent-item-arrow {
             color: var(--primary);
             font-size: 0.8rem;
             flex-shrink: 0;
+        }
+
+        .recent-item-delete {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            padding: 0;
+            color: #dc2626;
+            background: transparent;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: background 0.15s ease, color 0.15s ease;
+            font-weight: bold;
+        }
+
+        .recent-item-delete:hover {
+            background: rgba(220, 38, 38, 0.1);
+            color: #991b1b;
+        }
+
+        .recent-clear-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            padding: 0;
+            margin-left: 6px;
+            background: transparent;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.15s ease;
+            vertical-align: middle;
+        }
+
+        .recent-clear-btn:hover {
+            background: rgba(220, 38, 38, 0.15);
         }
 
         .recent-empty {
@@ -592,7 +657,10 @@
                 </div>
 
                 <div>
-                    <div class="section-kicker" id="recentKicker" style="display:none">Recientes</div>
+                    <div class="section-kicker" id="recentKicker" style="display:none">
+                        Recientes
+                        <button class="recent-clear-btn" type="button" id="clearAllRecentBtn" title="Limpiar historial" style="display:none">🗑️</button>
+                    </div>
                     <div class="recent-list" id="recentFilesList"></div>
                 </div>
             </aside>
@@ -656,28 +724,103 @@
             localStorage.setItem(RECENT_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)));
         }
 
-        function renderRecentFiles(activeFilePath) {
+        function removeRecentFile(filePath) {
+            const recent = getRecentFiles().filter((f) => f.path !== filePath);
+            localStorage.setItem(RECENT_KEY, JSON.stringify(recent));
+            renderRecentFiles(null);
+        }
+
+        function clearAllRecentFiles() {
+            if (confirm("¿Deseas eliminar todos los archivos recientes?")) {
+                localStorage.setItem(RECENT_KEY, JSON.stringify([]));
+                renderRecentFiles(null);
+            }
+        }
+
+        async function verifyFileExists(filePath) {
+            if (!window.electronExcel) return true;
+            try {
+                return await window.electronExcel.verifyFileExists(filePath);
+            } catch {
+                return false;
+            }
+        }
+
+        async function renderRecentFiles(activeFilePath) {
             const recent = getRecentFiles();
             const list = document.getElementById("recentFilesList");
             const kicker = document.getElementById("recentKicker");
+            const clearBtn = document.getElementById("clearAllRecentBtn");
 
             if (!recent.length) {
                 list.innerHTML = `<span class="recent-empty">Ningún archivo abierto aún.</span>`;
                 kicker.style.display = "none";
+                clearBtn.style.display = "none";
                 return;
             }
 
             kicker.style.display = "";
-            list.innerHTML = recent.map((f) => `
+            clearBtn.style.display = recent.length > 1 ? "inline-flex" : "none";
+
+            // Filtrar archivos que existen, manteniendo orden y eliminando los que no
+            const validFiles = [];
+            const filesToRemove = [];
+
+            for (const f of recent) {
+                const exists = await verifyFileExists(f.path);
+                if (exists) {
+                    validFiles.push(f);
+                } else {
+                    filesToRemove.push(f.path);
+                }
+            }
+
+            // Actualizar localStorage si hay archivos que no existen
+            if (filesToRemove.length > 0) {
+                localStorage.setItem(RECENT_KEY, JSON.stringify(validFiles));
+            }
+
+            if (!validFiles.length) {
+                list.innerHTML = `<span class="recent-empty">Ningún archivo abierto aún.</span>`;
+                kicker.style.display = "none";
+                clearBtn.style.display = "none";
+                return;
+            }
+
+            list.innerHTML = validFiles.map((f) => `
                 <div class="recent-item${f.path === activeFilePath ? " active-file" : ""}"
                      data-path="${escapeAttr(f.path)}" title="${escapeAttr(f.path)}">
-                    <span class="recent-item-name">${escapeHtml(f.name)}</span>
-                    <span class="recent-item-arrow">→</span>
+                    <div class="recent-item-content">
+                        <span class="recent-item-name">${escapeHtml(f.name)}</span>
+                    </div>
+                    <div class="recent-item-actions">
+                        <button class="recent-item-delete" type="button" title="Eliminar de recientes">✕</button>
+                        <span class="recent-item-arrow">→</span>
+                    </div>
                 </div>
             `).join("");
 
             list.querySelectorAll(".recent-item").forEach((item) => {
-                item.addEventListener("click", () => activateFile(item.dataset.path));
+                const deleteBtn = item.querySelector(".recent-item-delete");
+                const path = item.dataset.path;
+
+                // Click en el item = activar archivo
+                item.addEventListener("click", (e) => {
+                    if (e.target !== deleteBtn) {
+                        activateFile(path);
+                    }
+                });
+
+                // Click en el botón delete = eliminar
+                deleteBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    removeRecentFile(path);
+                });
+            });
+
+            clearBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                clearAllRecentFiles();
             });
         }
 
