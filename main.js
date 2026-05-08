@@ -1841,16 +1841,15 @@ function copyActivityBlockXml(sheetXml, options) {
     'text'
   );
 
-  // Paso 5: Borrar celdas de notas de estudiantes en el destino
-  // ⚠️ TEMPORALMENTE DESHABILITADO para debug: este paso estaba borrando valores pegados
-  // xml = clearActivityStudentInputCellsXml(xml, {
-  //   startRow: options.targetStart + options.firstStudentRowOffset,
-  //   rowCount: options.notesToClear,
-  //   ranges: [
-  //     { startCol: typeStartCol + 2, endCol: typeStartCol + 3 },
-  //     { startCol: options.noteCol, endCol: typeEndCol }
-  //   ]
-  // });
+  // Paso 5: Poner notas de estudiantes a 0 en el destino (no se copian)
+  xml = clearActivityStudentInputCellsXml(xml, {
+    startRow: options.targetStart + options.firstStudentRowOffset,
+    rowCount: options.notesToClear,
+    ranges: [
+      { startCol: typeStartCol + 2, endCol: typeStartCol + 3 },
+      { startCol: options.noteCol, endCol: typeEndCol }
+    ]
+  });
 
   return xml;
 }
@@ -1955,7 +1954,15 @@ function clearActivityStudentInputCellsXml(sheetXml, options) {
 
       const colIdx = columnIndex(cellRef.replace(/\d+$/, ''));
       const shouldClear = options.ranges.some((range) => colIdx >= range.startCol && colIdx <= range.endCol);
-      return shouldClear ? '' : cellXml;
+
+      if (!shouldClear) {
+        return cellXml;
+      }
+
+      // En lugar de borrar, poner 0 preservando el estilo original
+      const styleAttr = getXmlAttribute(cellXml, 's');
+      const styleStr = styleAttr ? ` s="${escapeXml(styleAttr)}"` : '';
+      return `<c r="${cellRef}"${styleStr}><v>0</v></c>`;
     });
   });
 }
