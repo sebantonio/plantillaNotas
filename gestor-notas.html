@@ -1372,14 +1372,21 @@
                 return;
             }
             const rraa = currentCriteriosState.rraa;
-            if (!rraa.length) {
-                container.innerHTML = '<div class="ce-detail-empty">No hay RRAA definidos.</div>';
-                return;
-            }
             const item = currentNotes[idx];
             if (!item) return;
 
-            // RA a mostrar: override > selector propio ya existente > RA global > primero disponible
+            // Solo RAs que tengan al menos un criterio con código no vacío
+            const rraaConCriterios = rraa.filter((ra) =>
+                currentCriteriosState.criterios.some(
+                    (c) => Number(c.raNumero) === Number(ra.numero) && (c.codigo || "").trim()
+                )
+            );
+            if (!rraaConCriterios.length) {
+                container.innerHTML = '<div class="ce-detail-empty">No hay criterios definidos para esta unidad.</div>';
+                return;
+            }
+
+            // RA a mostrar: override > selector propio ya existente > primero disponible
             const existingSelect = container.querySelector(".ce-student-ra-select");
             let raNum;
             if (overrideRaNum !== undefined) {
@@ -1387,18 +1394,24 @@
             } else if (existingSelect) {
                 raNum = Number(existingSelect.value);
             } else {
-                raNum = Number(rraa[0]?.numero) || 0;
+                raNum = Number(rraaConCriterios[0]?.numero) || 0;
+            }
+            // Si el RA actual no tiene criterios, ir al primero que sí los tenga
+            if (!rraaConCriterios.some((ra) => Number(ra.numero) === raNum)) {
+                raNum = Number(rraaConCriterios[0].numero);
             }
 
-            // Opciones del selector de RA
-            const raOptionsHtml = rraa.map((ra) => {
+            // Opciones del selector de RA (solo los que tienen criterios)
+            const raOptionsHtml = rraaConCriterios.map((ra) => {
                 const label = `RA ${ra.numero}${ra.descripcion ? " - " + ra.descripcion : ""}`;
                 const sel = Number(ra.numero) === raNum ? " selected" : "";
                 return `<option value="${escapeHtml(String(ra.numero))}"${sel}>${escapeHtml(label)}</option>`;
             }).join("");
 
-            // Lista CE del RA seleccionado
-            const criteriosRa = currentCriteriosState.criterios.filter((c) => Number(c.raNumero) === raNum);
+            // Lista CE del RA seleccionado (excluye criterios sin código)
+            const criteriosRa = currentCriteriosState.criterios.filter(
+                (c) => Number(c.raNumero) === raNum && (c.codigo || "").trim()
+            );
             const unidadActual = currentState && currentState.unidad;
             const unidades = (currentState && currentState.unidades) || [];
             const unidadIdx = unidades.findIndex((u) => u.codigo === unidadActual);

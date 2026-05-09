@@ -1366,6 +1366,17 @@ fn excel_save_notas_actividad(payload: Value) -> Result<Value, String> {
                     Some(n) => { s = set_xml_cell(&s, ri, block.note_col, Some(&json!(n)), "number")?; }
                     None    => { s = set_xml_cell(&s, ri, block.note_col, None, "number")?; }
                 }
+                // Guardar notas CE por alumno si vienen en el payload
+                if let Some(ce_notas) = nota_item["ceNotas"].as_object() {
+                    for (code, ci) in &block.ce_cols {
+                        if let Some(val) = ce_notas.get(code) {
+                            match normalize_grade(val) {
+                                Some(n) => { s = set_xml_cell(&s, ri, *ci, Some(&json!(n)), "number")?; }
+                                None    => { s = set_xml_cell(&s, ri, *ci, None, "number")?; }
+                            }
+                        }
+                    }
+                }
             }
         }
         Ok(s)
