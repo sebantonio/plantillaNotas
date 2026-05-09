@@ -776,6 +776,64 @@ fn excel_get_notas_evaluacion_alumno(payload: Value) -> Result<Value, String> {
     Ok(data)
 }
 
+// Lee la nota final de la unidad (col E = índice 4) y las notas de RA de esa unidad
+// La hoja U1..U16 tiene en col A nombres, col E nota final de la unidad,
+// y las notas de RA están en la hoja de evaluación. Aquí solo devolvemos col A + col E.
+fn load_notas_unidad(path: &str, unidad: &str) -> Result<Value, String> {
+    let rows = read_sheet_rows(path, unidad)
+        .map_err(|_| format!("No se encontró la hoja \"{unidad}\"."))?;
+    let unidades = list_unit_sheets(path)?;
+
+    // Buscar la fila de cabecera buscando "NOMBRE Y APELLIDOS" en col A (o cercana)
+    // y la fila a partir de la cual hay alumnos.
+    // En las hojas U la estructura es: fila 0 título, fila 3 cabecera, fila 4+ alumnos.
+    // Pero usamos find_activity_blocks para saber dónde empieza el primer bloque de alumnos.
+    // La col E (índice 4) es la nota final de la unidad, col A (índice 0) es el nombre.
+    let name_col: usize = 0;
+    let nota_col: usize = 4; // columna E
+
+    // Detectar primera fila de alumnos: buscamos la primera fila donde col A tiene texto
+    // y no es la cabecera (no contiene "NOMBRE")
+    let mut first_row = None;
+    for (ri, _row) in rows.iter().enumerate() {
+        let val = cell_str(&rows, ri, name_col);
+        if val.is_empty() { continue; }
+        let norm = normalize_plain(&val);
+        if norm.contains("NOMBRE") || norm.contains("ALUMNO") { continue; }
+        // Si la celda tiene texto que parece nombre de alumno
+        if val.len() > 3 && !norm.starts_with("PRACTICA") && !norm.starts_with("MEMORIA")
+            && !norm.starts_with("CONTROL") && !norm.starts_with("OTROS")
+            && !norm.starts_with("UNIDAD") && !norm.starts_with("U1")
+        {
+            first_row = Some(ri);
+            break;
+        }
+    }
+
+    let first_row = first_row.unwrap_or(4);
+    let mut alumnos: Vec<Value> = Vec::new();
+    for ri in first_row..rows.len() {
+        let nombre = cell_str(&rows, ri, name_col);
+        if nombre.is_empty() || nombre == "0" { break; }
+        let norm = normalize_plain(&nombre);
+        if norm.contains("MEDIA") || norm.contains("PONDERACION") { continue; }
+        let nota = cell_f64(&rows, ri, nota_col);
+        let display = cell_str(&rows, ri, nota_col);
+        alumnos.push(json!({ "nombre": nombre, "nota": nota, "display": display }));
+    }
+
+    let file_name = Path::new(path).file_name().unwrap_or_default().to_string_lossy().to_string();
+    Ok(json!({ "filePath": path, "fileName": file_name, "unidad": unidad, "unidades": unidades, "alumnos": alumnos }))
+}
+
+#[tauri::command]
+fn excel_get_notas_unidad(payload: Value) -> Result<Value, String> {
+    if get_selected_path().is_none() { set_selected_path(find_default_excel_path()); }
+    let path = match get_selected_path() { Some(p) => p, None => return Ok(Value::Null) };
+    let unidad = payload["unidad"].as_str().unwrap_or("U1").to_string();
+    load_notas_unidad(&path, &unidad)
+}
+
 #[tauri::command]
 fn excel_get_alumnos_informes() -> Result<Value, String> {
     if get_selected_path().is_none() { set_selected_path(find_default_excel_path()); }
@@ -1537,7 +1595,7 @@ fn main() {
             excel_get_notas_actividad, excel_get_notas_actividades_tipo,
             excel_save_notas_actividad, excel_add_actividad,
             excel_get_notas_evaluacion, excel_get_notas_evaluacion_alumno,
-            excel_get_alumnos_informes, app_open_external
+            excel_get_notas_unidad, excel_get_alumnos_informes, app_open_external
         ])
         .run(tauri::generate_context!())
         .expect("error al ejecutar la aplicacion Tauri");

@@ -8,7 +8,8 @@
       "Read(//d//**)",
       "WebSearch",
       "WebFetch(domain:docs.rs)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "PowerShell(& \"$env:USERPROFILE\\\\.cargo\\\\bin\\\\cargo.exe\" build --manifest-path \"d:\\\\OneDrive - Consejería de Educación, Cultura y Deportes Castilla La-Mancha\\\\Github\\\\plantillaNotas\\\\plantillaNotas\\\\src-tauri\\\\Cargo.toml\" 2>&1 | Select-Object -Last 25)"
     ]
   }
 }
