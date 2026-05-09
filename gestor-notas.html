@@ -379,38 +379,51 @@
             background: #fafbff;
         }
 
-        .ra-group {
+        .ra-selector-row {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 12px;
+            align-items: center;
             margin-bottom: 18px;
         }
 
-        .ra-group:last-child {
-            margin-bottom: 0;
-        }
-
-        .ra-header {
-            display: flex;
-            align-items: baseline;
-            gap: 10px;
-            margin-bottom: 12px;
-            padding-bottom: 6px;
-            border-bottom: 2px solid #667eea;
-        }
-
-        .ra-code {
-            font-weight: 800;
-            color: #667eea;
-            font-size: 0.95em;
+        .ra-selector-row label {
+            font-weight: 700;
+            color: #4b5563;
+            font-size: 0.9em;
             white-space: nowrap;
         }
 
-        .ra-desc {
+        .ra-selector-row select {
+            max-width: 600px;
+        }
+
+        .ra-desc-box {
+            margin-bottom: 16px;
+            padding: 10px 14px;
+            background: #eef0fd;
+            border-left: 4px solid #667eea;
+            border-radius: 6px;
             color: #374151;
-            font-size: 0.92em;
+            font-size: 0.9em;
+            display: none;
+        }
+
+        .ce-list-header {
+            display: grid;
+            grid-template-columns: 56px 1fr 130px;
+            gap: 10px;
+            padding: 6px 0;
+            margin-bottom: 6px;
+            border-bottom: 1px solid #e5e7eb;
+            color: #6b7280;
+            font-size: 0.82em;
+            font-weight: 700;
         }
 
         .criterio-row {
             display: grid;
-            grid-template-columns: 56px 1fr auto;
+            grid-template-columns: 56px 1fr 130px;
             gap: 10px;
             align-items: start;
             margin-bottom: 10px;
@@ -449,8 +462,14 @@
             padding-top: 10px;
             color: #6b7280;
             font-size: 0.82em;
-            white-space: nowrap;
             text-align: right;
+        }
+
+        .criterios-empty {
+            padding: 18px;
+            color: #6b7280;
+            text-align: center;
+            font-size: 0.92em;
         }
 
         .criterios-actions {
@@ -529,11 +548,18 @@
 
             <section id="criteriosSection" class="criterios-section" style="display:none" aria-label="Criterios de evaluacion">
                 <details class="criterios-details" id="criteriosDetails">
-                    <summary>Criterios de evaluacion del RA asociado a esta unidad</summary>
+                    <summary>Criterios de Evaluacion (CE) del RA</summary>
                     <div class="criterios-body">
+                        <div class="ra-selector-row">
+                            <label for="raSelect">Resultado de Aprendizaje</label>
+                            <select id="raSelect">
+                                <option value="">-- Selecciona un RA --</option>
+                            </select>
+                        </div>
+                        <div class="ra-desc-box" id="raDescBox"></div>
                         <div id="criteriosContent"></div>
                         <div class="criterios-actions">
-                            <button class="secondary" type="button" id="saveCriteriosButton">Guardar criterios</button>
+                            <button class="secondary" type="button" id="saveCriteriosButton">Guardar CE</button>
                         </div>
                     </div>
                 </details>
@@ -640,6 +666,8 @@
         const criteriosSection = document.getElementById("criteriosSection");
         const criteriosContent = document.getElementById("criteriosContent");
         const saveCriteriosButton = document.getElementById("saveCriteriosButton");
+        const raSelect = document.getElementById("raSelect");
+        const raDescBox = document.getElementById("raDescBox");
 
         document.addEventListener("DOMContentLoaded", () => {
             if (!window.electronExcel) {
@@ -652,6 +680,7 @@
             saveButton.addEventListener("click", saveNotas);
             clearButton.addEventListener("click", clearNotas);
             saveCriteriosButton.addEventListener("click", saveCriterios);
+            raSelect.addEventListener("change", () => renderCeForSelectedRa());
             unidadSelect.addEventListener("change", () => loadNotasConGuardado({ keepActivity: false }));
             tipoSelect.addEventListener("change", () => loadNotasConGuardado({ keepActivity: false }));
             actividadSelect.addEventListener("change", () => loadNotasConGuardado());
@@ -967,68 +996,108 @@
         }
 
         function renderCriterios(data) {
-            const criterios = data.criterios || [];
+            const todasCriterios = data.todasCriterios || data.criterios || [];
+            const rraa = data.rraa || [];
 
-            if (!criterios.length) {
+            if (!rraa.length) {
                 criteriosSection.style.display = "none";
                 currentCriteriosState = null;
                 return;
             }
 
             currentCriteriosState = {
-                rraa: data.rraa || [],
-                criterios: data.todasCriterios || criterios,
-                ponderacionesUnidad: data.ponderacionesUnidad || []
+                rraa,
+                criterios: todasCriterios,
+                ponderacionesUnidad: data.ponderacionesUnidad || [],
+                criteriosPorUnidad: data.criterios || []
             };
 
             criteriosSection.style.display = "";
 
-            // Agrupar por RA
-            const byRa = {};
-            criterios.forEach((c) => {
-                if (!byRa[c.raNumero]) {
-                    byRa[c.raNumero] = {
-                        raNumero: c.raNumero,
-                        raDescripcion: c.raDescripcion || "",
-                        criterios: []
-                    };
-                }
-                byRa[c.raNumero].criterios.push(c);
+            // Poblar selector de RA
+            raSelect.innerHTML = '<option value="">-- Selecciona un RA --</option>';
+            rraa.forEach((ra) => {
+                const opt = document.createElement("option");
+                opt.value = String(ra.numero);
+                opt.textContent = `RA ${ra.numero}${ra.descripcion ? " - " + ra.descripcion : ""}`;
+                raSelect.appendChild(opt);
             });
 
-            const fragment = document.createDocumentFragment();
-            Object.values(byRa).sort((a, b) => a.raNumero - b.raNumero).forEach((ra) => {
-                const group = document.createElement("div");
-                group.className = "ra-group";
-
-                const header = document.createElement("div");
-                header.className = "ra-header";
-                header.innerHTML = `
-                    <span class="ra-code">RA ${escapeHtml(String(ra.raNumero))}</span>
-                    <span class="ra-desc">${escapeHtml(ra.raDescripcion)}</span>
-                `;
-                group.appendChild(header);
-
-                ra.criterios.forEach((c) => {
-                    const pesoTotal = ((c.ponderacionUnidad && c.ponderacionUnidad.ponderacion) || 0);
-                    const pesoInst = ((c.ponderacionUnidad && c.ponderacionUnidad.ponderacionInstituto) || 0);
-                    const pesoEmp = ((c.ponderacionUnidad && c.ponderacionUnidad.ponderacionEmpresa) || 0);
-                    const pesoLabel = pesoTotal > 0
-                        ? `Peso: ${Math.round(pesoTotal * 100)}% (I:${Math.round(pesoInst * 100)}% E:${Math.round(pesoEmp * 100)}%)`
-                        : "";
-
-                    const row = document.createElement("div");
-                    row.className = "criterio-row";
-                    row.dataset.colIdx = c.colIdx;
-                    row.innerHTML = `
-                        <div class="criterio-code">${escapeHtml(c.codigo)}</div>
-                        <textarea class="criterio-texto" rows="2" aria-label="Descripcion criterio ${escapeHtml(c.codigo)}">${escapeHtml(c.texto)}</textarea>
-                        <div class="criterio-peso">${escapeHtml(pesoLabel)}</div>
-                    `;
-                    group.appendChild(row);
+            // Pre-seleccionar el RA con mayor peso en la unidad actual
+            const criteriosUnidad = data.criterios || [];
+            let preselectedRa = null;
+            if (criteriosUnidad.length > 0) {
+                const raCounts = {};
+                criteriosUnidad.forEach((c) => {
+                    raCounts[c.raNumero] = (raCounts[c.raNumero] || 0) + 1;
                 });
+                preselectedRa = Object.entries(raCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+            }
+            if (preselectedRa) {
+                raSelect.value = preselectedRa;
+            }
 
-                fragment.appendChild(group);
+            criteriosContent.innerHTML = "";
+            raDescBox.style.display = "none";
+            renderCeForSelectedRa();
+        }
+
+        function renderCeForSelectedRa() {
+            if (!currentCriteriosState) return;
+
+            const raNum = Number(raSelect.value);
+            if (!raNum) {
+                raDescBox.style.display = "none";
+                criteriosContent.innerHTML = '<div class="criterios-empty">Selecciona un RA para ver sus criterios de evaluacion.</div>';
+                return;
+            }
+
+            const raInfo = currentCriteriosState.rraa.find((r) => Number(r.numero) === raNum);
+            if (raInfo && raInfo.descripcion) {
+                raDescBox.textContent = raInfo.descripcion;
+                raDescBox.style.display = "";
+            } else {
+                raDescBox.style.display = "none";
+            }
+
+            const criteriosRa = currentCriteriosState.criterios.filter((c) => Number(c.raNumero) === raNum);
+            if (!criteriosRa.length) {
+                criteriosContent.innerHTML = '<div class="criterios-empty">Este RA no tiene criterios de evaluacion definidos.</div>';
+                return;
+            }
+
+            // Encontrar ponderaciones de la unidad actual (por posicion en la lista de unidades)
+            const unidadActual = currentState && currentState.unidad;
+            const unidades = (currentState && currentState.unidades) || [];
+            const unidadIdx = unidades.findIndex((u) => u.codigo === unidadActual);
+            const unidadPesos = unidadIdx >= 0 ? currentCriteriosState.ponderacionesUnidad[unidadIdx] : null;
+
+            const fragment = document.createDocumentFragment();
+
+            const headerRow = document.createElement("div");
+            headerRow.className = "ce-list-header";
+            headerRow.innerHTML = "<span>Codigo</span><span>Descripcion (editable)</span><span>Peso en unidad</span>";
+            fragment.appendChild(headerRow);
+
+            criteriosRa.forEach((c) => {
+                const ci = String(c.colIdx);
+                const pesos = unidadPesos && unidadPesos.ponderaciones && unidadPesos.ponderaciones[ci];
+                const pesoTotal = pesos ? (pesos.ponderacion || 0) : 0;
+                const pesoInst = pesos ? (pesos.ponderacionInstituto || 0) : 0;
+                const pesoEmp = pesos ? (pesos.ponderacionEmpresa || 0) : 0;
+                const pesoLabel = pesoTotal > 0
+                    ? `${Math.round(pesoTotal * 100)}% (I:${Math.round(pesoInst * 100)}% E:${Math.round(pesoEmp * 100)}%)`
+                    : "—";
+
+                const row = document.createElement("div");
+                row.className = "criterio-row";
+                row.dataset.colIdx = c.colIdx;
+                row.innerHTML = `
+                    <div class="criterio-code">${escapeHtml(c.codigo)}</div>
+                    <textarea class="criterio-texto" rows="2" aria-label="Descripcion CE ${escapeHtml(c.codigo)}">${escapeHtml(c.texto || "")}</textarea>
+                    <div class="criterio-peso">${escapeHtml(pesoLabel)}</div>
+                `;
+                fragment.appendChild(row);
             });
 
             criteriosContent.textContent = "";
@@ -1038,7 +1107,6 @@
         async function saveCriterios() {
             if (!currentCriteriosState) return;
 
-            // Recoger textos editados de los textareas
             const editedTexts = {};
             criteriosContent.querySelectorAll(".criterio-row").forEach((row) => {
                 const colIdx = Number(row.dataset.colIdx);
@@ -1048,7 +1116,6 @@
                 }
             });
 
-            // Actualizar textos en la copia completa de criterios
             const criteriosActualizados = currentCriteriosState.criterios.map((c) =>
                 Object.prototype.hasOwnProperty.call(editedTexts, c.colIdx)
                     ? { ...c, texto: editedTexts[c.colIdx] }
@@ -1063,6 +1130,8 @@
                     criterios: criteriosActualizados,
                     ponderacionesUnidad: currentCriteriosState.ponderacionesUnidad
                 });
+                // Actualizar el estado local con los textos guardados
+                currentCriteriosState.criterios = criteriosActualizados;
                 showMessage("Criterios guardados correctamente.", "success");
             } catch (error) {
                 showMessage(error.message || "No se pudieron guardar los criterios.", "error");
