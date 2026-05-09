@@ -554,6 +554,28 @@
             border-bottom: 2px solid #d0d5f8;
         }
 
+        .ce-detail-ra-row {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .ce-detail-ra-row label {
+            font-size: 0.82em;
+            font-weight: 700;
+            color: #4b5563;
+            white-space: nowrap;
+        }
+
+        .ce-detail-ra-row select {
+            max-width: 520px;
+            min-height: 32px;
+            padding: 4px 8px;
+            font-size: 0.85em;
+        }
+
         .ce-detail-header {
             margin-bottom: 8px;
             font-size: 0.82em;
@@ -1303,68 +1325,91 @@
             }
         }
 
-        function renderCeContentForStudent(idx, container) {
+        function renderCeContentForStudent(idx, container, overrideRaNum) {
             if (!currentCriteriosState) {
                 container.innerHTML = '<div class="ce-detail-empty">No hay criterios cargados.</div>';
                 return;
             }
-            const raNum = Number(raSelect.value);
-            if (!raNum) {
-                container.innerHTML = '<div class="ce-detail-empty">Selecciona un RA en el panel superior para ver los criterios.</div>';
+            const rraa = currentCriteriosState.rraa;
+            if (!rraa.length) {
+                container.innerHTML = '<div class="ce-detail-empty">No hay RRAA definidos.</div>';
                 return;
             }
             const item = currentNotes[idx];
             if (!item) return;
 
-            const raInfo = currentCriteriosState.rraa.find((r) => Number(r.numero) === raNum);
-            const criteriosRa = currentCriteriosState.criterios.filter((c) => Number(c.raNumero) === raNum);
-
-            if (!criteriosRa.length) {
-                container.innerHTML = '<div class="ce-detail-empty">Este RA no tiene criterios definidos.</div>';
-                return;
+            // RA a mostrar: override > selector propio ya existente > RA global > primero disponible
+            const existingSelect = container.querySelector(".ce-student-ra-select");
+            let raNum;
+            if (overrideRaNum !== undefined) {
+                raNum = overrideRaNum;
+            } else if (existingSelect) {
+                raNum = Number(existingSelect.value);
+            } else {
+                raNum = Number(raSelect.value) || Number(rraa[0]?.numero) || 0;
             }
 
+            // Opciones del selector de RA
+            const raOptionsHtml = rraa.map((ra) => {
+                const label = `RA ${ra.numero}${ra.descripcion ? " - " + ra.descripcion : ""}`;
+                const sel = Number(ra.numero) === raNum ? " selected" : "";
+                return `<option value="${escapeHtml(String(ra.numero))}"${sel}>${escapeHtml(label)}</option>`;
+            }).join("");
+
+            // Lista CE del RA seleccionado
+            const criteriosRa = currentCriteriosState.criterios.filter((c) => Number(c.raNumero) === raNum);
             const unidadActual = currentState && currentState.unidad;
             const unidades = (currentState && currentState.unidades) || [];
             const unidadIdx = unidades.findIndex((u) => u.codigo === unidadActual);
             const unidadPesos = unidadIdx >= 0 ? currentCriteriosState.ponderacionesUnidad[unidadIdx] : null;
-
             const ceNotas = item.ceNotas || {};
-            const raLabel = raInfo
-                ? `RA ${raInfo.numero}${raInfo.descripcion ? " — " + raInfo.descripcion : ""}`
-                : `RA ${raNum}`;
 
-            let html = `<div class="ce-detail-header">${escapeHtml(raLabel)}</div>`;
-            html += '<div class="ce-detail-list">';
-            html += '<div class="ce-detail-col-header">CE</div>';
-            html += '<div class="ce-detail-col-header">Descripcion</div>';
-            html += '<div class="ce-detail-col-header" style="text-align:center">Nota</div>';
-            html += '<div class="ce-detail-col-header" style="text-align:right">Peso</div>';
+            let ceListHtml = "";
+            if (!criteriosRa.length) {
+                ceListHtml = '<div class="ce-detail-empty">Este RA no tiene criterios definidos.</div>';
+            } else {
+                ceListHtml = '<div class="ce-detail-list">';
+                ceListHtml += '<div class="ce-detail-col-header">CE</div>';
+                ceListHtml += '<div class="ce-detail-col-header">Descripcion</div>';
+                ceListHtml += '<div class="ce-detail-col-header" style="text-align:center">Nota</div>';
+                ceListHtml += '<div class="ce-detail-col-header" style="text-align:right">Peso</div>';
 
-            criteriosRa.forEach((c) => {
-                const ci = String(c.colIdx);
-                const pesos = unidadPesos && unidadPesos.ponderaciones && unidadPesos.ponderaciones[ci];
-                const pesoTotal = pesos ? (pesos.ponderacion || 0) : 0;
-                const pesoInst  = pesos ? (pesos.ponderacionInstituto || 0) : 0;
-                const pesoEmp   = pesos ? (pesos.ponderacionEmpresa || 0) : 0;
-                const pesoLabel = pesoTotal > 0
-                    ? `${Math.round(pesoTotal * 100)}%\n(I:${Math.round(pesoInst * 100)}% E:${Math.round(pesoEmp * 100)}%)`
-                    : "—";
+                criteriosRa.forEach((c) => {
+                    const ci = String(c.colIdx);
+                    const pesos = unidadPesos && unidadPesos.ponderaciones && unidadPesos.ponderaciones[ci];
+                    const pesoTotal = pesos ? (pesos.ponderacion || 0) : 0;
+                    const pesoInst  = pesos ? (pesos.ponderacionInstituto || 0) : 0;
+                    const pesoEmp   = pesos ? (pesos.ponderacionEmpresa || 0) : 0;
+                    const pesoLabel = pesoTotal > 0
+                        ? `${Math.round(pesoTotal * 100)}%\n(I:${Math.round(pesoInst * 100)}% E:${Math.round(pesoEmp * 100)}%)`
+                        : "—";
+                    const codigoLower = (c.codigo || "").toLowerCase();
+                    const nota = ceNotas[codigoLower] || ceNotas[c.codigo] || "";
+                    const notaNum = nota !== "" ? parseFloat(String(nota).replace(",", ".")) : null;
+                    const notaClass = nota === "" ? "empty" : notaNum >= 5 ? "high" : "low";
+                    const notaDisplay = nota === "" ? "—" : nota;
 
-                const codigoLower = (c.codigo || "").toLowerCase();
-                const nota = ceNotas[codigoLower] || ceNotas[c.codigo] || "";
-                const notaNum = nota !== "" ? parseFloat(String(nota).replace(",", ".")) : null;
-                const notaClass = nota === "" ? "empty" : notaNum >= 5 ? "high" : "low";
-                const notaDisplay = nota === "" ? "—" : nota;
+                    ceListHtml += `<div class="ce-detail-code">${escapeHtml(c.codigo)}</div>`;
+                    ceListHtml += `<div class="ce-detail-texto" title="${escapeHtml(c.texto || "")}">${escapeHtml(c.texto || "")}</div>`;
+                    ceListHtml += `<div class="ce-detail-nota ${notaClass}">${escapeHtml(notaDisplay)}</div>`;
+                    ceListHtml += `<div class="ce-detail-peso">${escapeHtml(pesoLabel)}</div>`;
+                });
 
-                html += `<div class="ce-detail-code">${escapeHtml(c.codigo)}</div>`;
-                html += `<div class="ce-detail-texto" title="${escapeHtml(c.texto || "")}">${escapeHtml(c.texto || "")}</div>`;
-                html += `<div class="ce-detail-nota ${notaClass}">${escapeHtml(notaDisplay)}</div>`;
-                html += `<div class="ce-detail-peso">${escapeHtml(pesoLabel)}</div>`;
+                ceListHtml += '</div>';
+            }
+
+            container.innerHTML = `
+                <div class="ce-detail-ra-row">
+                    <label>Resultado de Aprendizaje</label>
+                    <select class="ce-student-ra-select">${raOptionsHtml}</select>
+                </div>
+                ${ceListHtml}
+            `;
+
+            // Listener en el select recién creado
+            container.querySelector(".ce-student-ra-select").addEventListener("change", (e) => {
+                renderCeContentForStudent(idx, container, Number(e.target.value));
             });
-
-            html += '</div>';
-            container.innerHTML = html;
         }
 
         function refreshOpenCeRows() {
