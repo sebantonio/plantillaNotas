@@ -430,10 +430,7 @@
                     const entry = raNotas.find(r => r.numero === ra.numero);
                     const raCls = entry ? (gradeClassDisplay(entry.display) || gradeClass(entry.nota)) : "empty";
                     const raVal = entry ? (entry.display ? fmtDisplay(entry.display) : fmt(entry.nota)) : "-";
-                    const hasCe = entry && entry.ceNotas && entry.ceNotas.length > 0;
-                    const ceBtn = hasCe
-                        ? `<button id="ce-btn-${idx}-${ra.numero}" class="btn-ce-toggle" onclick="toggleCeDetail(${idx}, ${ra.numero})">▼ CE</button>`
-                        : "";
+                    const ceBtn = `<button id="ce-btn-${idx}-${ra.numero}" class="btn-ce-toggle" onclick="toggleCeDetail(${idx}, ${ra.numero})">▼ CE</button>`;
                     return `<span class="ra-detail-item">
                         <span class="ra-detail-label">${esc(ra.label)}:</span>
                         <span class="grade ${raCls}">${raVal}</span>${ceBtn}
