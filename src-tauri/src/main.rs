@@ -1,29 +1,25 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use once_cell::sync::Mutex;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::{Read as IoRead, Write};
 use std::path::Path;
-use std::sync::OnceLock;
+use std::sync::Mutex;
 
 // ---------------------------------------------------------------------------
 // Estado global: ruta del Excel seleccionado
 // ---------------------------------------------------------------------------
 
-static SELECTED_PATH: OnceLock<Mutex<Option<String>>> = OnceLock::new();
-
-fn selected_path_lock() -> &'static Mutex<Option<String>> {
-    SELECTED_PATH.get_or_init(|| Mutex::new(None))
-}
+static SELECTED_PATH: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
 
 fn get_selected_path() -> Option<String> {
-    selected_path_lock().lock().unwrap().clone()
+    SELECTED_PATH.lock().unwrap().clone()
 }
 
 fn set_selected_path(p: Option<String>) {
-    *selected_path_lock().lock().unwrap() = p;
+    *SELECTED_PATH.lock().unwrap() = p;
 }
 
 fn find_default_excel_path() -> Option<String> {
@@ -94,27 +90,26 @@ fn parse_decimal(v: &Value) -> f64 {
 // Leer XLSX con calamine
 // ---------------------------------------------------------------------------
 
-use calamine::{open_workbook_auto, DataType, Reader};
+use calamine::{open_workbook_auto, Data, Reader};
 
 fn read_sheet_rows(path: &str, sheet: &str) -> Result<Vec<Vec<Value>>, String> {
     let mut wb = open_workbook_auto(path).map_err(|e| e.to_string())?;
     let range = wb
         .worksheet_range(sheet)
-        .ok_or_else(|| format!("Hoja '{sheet}' no encontrada"))?
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Hoja '{sheet}' no encontrada: {e}"))?;
 
     Ok(range
         .rows()
         .map(|row| {
             row.iter()
                 .map(|cell| match cell {
-                    DataType::Empty => Value::Null,
-                    DataType::String(s) => Value::String(s.clone()),
-                    DataType::Float(f) => json!(f),
-                    DataType::Int(i) => json!(i),
-                    DataType::Bool(b) => Value::Bool(*b),
-                    DataType::DateTime(f) => json!(f),
-                    DataType::Error(_) => Value::Null,
+                    Data::Empty => Value::Null,
+                    Data::String(s) => Value::String(s.clone()),
+                    Data::Float(f) => json!(f),
+                    Data::Int(i) => json!(i),
+                    Data::Bool(b) => Value::Bool(*b),
+                    Data::DateTime(f) => json!(f),
+                    Data::Error(_) => Value::Null,
                     _ => Value::Null,
                 })
                 .collect()
@@ -958,7 +953,7 @@ fn edit_workbook_sheets_xml(path: &str, sheet_edits: Vec<(&str, Box<dyn Fn(&str)
 
     let names_ordered: Vec<String> = {
         let input2 = std::fs::read(path).map_err(|e| e.to_string())?;
-        let z2 = zip::ZipArchive::new(std::io::Cursor::new(input2)).map_err(|e| e.to_string())?;
+        let mut z2 = zip::ZipArchive::new(std::io::Cursor::new(input2)).map_err(|e| e.to_string())?;
         (0..z2.len()).filter_map(|i| z2.by_index_raw(i).ok().map(|f| f.name().to_string())).collect()
     };
     let mut final_order: Vec<String> = names_ordered.into_iter().filter(|n| n != "xl/calcChain.xml").collect();
@@ -1036,10 +1031,13 @@ fn sync_eval_unit_blocks_xml(sheet_xml: &str, rows: &[Vec<Value>], unidades: &[V
         let units_for_eval: Vec<&Value> = unidades.iter().filter(|u| u["evaluacion"].as_str().unwrap_or("").contains(eval_str)).collect();
         for idx in 0..16 {
             let ri = start + idx;
-            xml = set_xml_cell(&xml, ri, 9, Some(&json!(format!("U{}", idx + 1))), "text")?;
+            let u_label = json!(format!("U{}", idx + 1));
+            xml = set_xml_cell(&xml, ri, 9, Some(&u_label), "text")?;
             let nombre = units_for_eval.get(idx).and_then(|u| u["nombre"].as_str()).unwrap_or("");
-            xml = set_xml_cell(&xml, ri, 10, if nombre.is_empty() { None } else { Some(&json!(nombre)) }, "text")?;
-            xml = set_xml_cell(&xml, ri, 11, Some(&json!(eval_label)), "text")?;
+            let nombre_val = json!(nombre);
+            xml = set_xml_cell(&xml, ri, 10, if nombre.is_empty() { None } else { Some(&nombre_val) }, "text")?;
+            let eval_val = json!(eval_label);
+            xml = set_xml_cell(&xml, ri, 11, Some(&eval_val), "text")?;
         }
     }
     Ok(xml)
@@ -1059,9 +1057,11 @@ fn save_unidades_to_file(path: &str, unidades: &[Value]) -> Result<(), String> {
             let codigo = u.and_then(|v| v["codigo"].as_str()).filter(|c| !c.is_empty()).map(|c| c.to_string()).unwrap_or_else(|| format!("U{}", idx + 1));
             s = set_xml_cell(&s, ri, 8, Some(&json!(codigo)), "text")?;
             let nombre = u.and_then(|v| v["nombre"].as_str()).unwrap_or("");
-            s = set_xml_cell(&s, ri, 9, if nombre.is_empty() { None } else { Some(&json!(nombre)) }, "text")?;
+            let nombre_val = json!(nombre);
+            s = set_xml_cell(&s, ri, 9, if nombre.is_empty() { None } else { Some(&nombre_val) }, "text")?;
             let eval = u.and_then(|v| v["evaluacion"].as_str()).unwrap_or("");
-            s = set_xml_cell(&s, ri, 10, if eval.is_empty() { None } else { Some(&json!(eval)) }, "text")?;
+            let eval_val = json!(eval);
+            s = set_xml_cell(&s, ri, 10, if eval.is_empty() { None } else { Some(&eval_val) }, "text")?;
             let horas_str = u.and_then(|v| v["horas"].as_str()).unwrap_or("");
             if horas_str.is_empty() {
                 s = set_xml_cell(&s, ri, 11, None, "number")?;
@@ -1172,7 +1172,8 @@ fn excel_save_notas_actividad(payload: Value) -> Result<Value, String> {
         let mut s = xml.to_string();
         let nv = nombre_actividad.as_deref().map(|n| json!(n));
         s = set_xml_cell(&s, block.number_row, block.name_value_col, nv.as_ref(), "text")?;
-        s = set_xml_cell(&s, block.included_row, block.included_col, if incluida { Some(&json!("X")) } else { None }, "text")?;
+        let x_val = json!("X");
+        s = set_xml_cell(&s, block.included_row, block.included_col, if incluida { Some(&x_val) } else { None }, "text")?;
         for nota_item in &notas {
             if let Some(ri) = nota_item["rowIdx"].as_u64().map(|n| n as usize) {
                 if ri < block.first_student_row { continue; }
@@ -1321,8 +1322,10 @@ fn copy_activity_block_xml(sheet_xml: &str, source_start: usize, source_end: usi
 
     xml = copy_activity_merges_xml(&xml, source_start, source_end, target_start, type_start_col, type_end_col)?;
     xml = set_xml_cell(&xml, target_start + 1, number_col, Some(&json!(new_number)), "number")?;
-    xml = set_xml_cell(&xml, target_start + 1, name_value_col, if nombre_actividad.is_empty() { None } else { Some(&json!(nombre_actividad)) }, "text")?;
-    xml = set_xml_cell(&xml, target_start + included_row_offset, included_col, if incluida { Some(&json!("X")) } else { None }, "text")?;
+    let nombre_val = json!(nombre_actividad);
+    xml = set_xml_cell(&xml, target_start + 1, name_value_col, if nombre_actividad.is_empty() { None } else { Some(&nombre_val) }, "text")?;
+    let x_val = json!("X");
+    xml = set_xml_cell(&xml, target_start + included_row_offset, included_col, if incluida { Some(&x_val) } else { None }, "text")?;
 
     let student_start_row = target_start + first_student_row_offset + 1;
     let student_end_row = student_start_row + notes_to_clear;
