@@ -463,6 +463,7 @@ struct ActivityBlock {
     name_col: usize, note_col: usize, number_col: usize,
     name_value_col: usize, included_col: usize,
     nombre: String, incluida: bool,
+    ce_cols: Vec<(String, usize)>,
 }
 
 fn find_activity_header_col(row: &[Value], start_col: usize, text: &str) -> Option<usize> {
@@ -493,12 +494,24 @@ fn find_activity_blocks(rows: &[Vec<Value>], tipo_key: &str) -> Vec<ActivityBloc
         let name_value_col = resolve_name_value_col(&row1, at.base_col);
         let nombre = cell_val_str(row1.get(name_value_col).unwrap_or(&Value::Null)).trim().to_string();
         let included_val = rows.get(row_idx + 2).and_then(|r| r.get(at.base_col + 1)).map(cell_val_str).unwrap_or_default();
+        let fixed = activity_fixed_cols(at.key);
+        let mut ce_cols = Vec::new();
+        for ci in (note_col + 1)..=fixed.end {
+            if let Some(v) = header_row_data.get(ci) {
+                let s = cell_val_str(v);
+                let strim = s.trim().to_lowercase();
+                if strim.is_empty() { continue; }
+                let code = if strim.ends_with(')') { strim.clone() } else { format!("{strim})") };
+                if is_criterion_code(&code) { ce_cols.push((code, ci)); }
+            }
+        }
         blocks.push(ActivityBlock {
             tipo: at.key.to_string(), tipo_label: at.label.to_string(), numero: activity_number,
             title_row: row_idx, number_row: row_idx + 1, included_row: row_idx + 2,
             header_row: row_idx + 3, first_student_row: row_idx + 4,
             name_col, note_col, number_col: at.base_col + 1, name_value_col,
             included_col: at.base_col + 1, nombre, incluida: normalize_plain(&included_val) == "X",
+            ce_cols,
         });
     }
     blocks
@@ -520,7 +533,17 @@ fn extract_activity_notes(rows: &[Vec<Value>], block: &ActivityBlock, max_alumno
             Value::String(s) => Some(s.replace('.', ",")),
             _ => None,
         }.unwrap_or_default();
-        notes.push(json!({ "numero": notes.len() + 1, "rowIdx": row_idx, "nombre": nombre, "nota": nota_str }));
+        let mut ce_notas = serde_json::Map::new();
+        for (code, ci) in &block.ce_cols {
+            let val = rows.get(row_idx).and_then(|r| r.get(*ci)).cloned().unwrap_or(Value::Null);
+            let nota_ce = match &val {
+                Value::Number(n) => n.as_f64().map(|f| f.to_string().replace('.', ",")),
+                Value::String(s) if !s.trim().is_empty() => Some(s.replace('.', ",")),
+                _ => None,
+            };
+            if let Some(s) = nota_ce { ce_notas.insert(code.clone(), json!(s)); }
+        }
+        notes.push(json!({ "numero": notes.len() + 1, "rowIdx": row_idx, "nombre": nombre, "nota": nota_str, "ceNotas": Value::Object(ce_notas) }));
         if let Some(max) = max_alumnos { if notes.len() >= max { break; } }
     }
     notes
@@ -1609,6 +1632,52 @@ fn excel_add_actividad(payload: Value) -> Result<Value, String> {
 }
 
 // ---------------------------------------------------------------------------
+// save_ce_notas (batch: escribe la nota de un CE en todas las filas de alumnos)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+fn excel_save_ce_notas(payload: Value) -> Result<Value, String> {
+    let path = require_selected_path()?;
+    let unidad = payload["unidad"].as_str().ok_or("Falta unidad")?.to_string();
+    let tipo = payload["tipo"].as_str().ok_or("Falta tipo")?.to_string();
+    let actividad = payload["actividad"].as_i64().unwrap_or(1);
+    let ce_notas = payload["ceNotas"].as_object().cloned().unwrap_or_default();
+
+    if ce_notas.is_empty() {
+        return load_notas_actividad(&path, &unidad, &tipo, actividad, None);
+    }
+
+    let rows = read_sheet_rows(&path, &unidad).map_err(|_| format!("El archivo no tiene la hoja \"{unidad}\"."))?;
+    let at = get_activity_type(&tipo);
+    let blocks = find_activity_blocks(&rows, at.key);
+    let block = blocks.iter().find(|b| b.numero == actividad)
+        .ok_or_else(|| format!("No se encontro la actividad {actividad} de {} en {unidad}.", at.label))?.clone();
+
+    let path_clone = path.clone(); let unidad_clone = unidad.clone(); let tipo_clone = tipo.clone();
+
+    edit_workbook_sheets_xml(&path, vec![(&unidad, Box::new(move |xml: &str| {
+        let mut s = xml.to_string();
+        let mut ri = block.first_student_row;
+        loop {
+            if ri >= rows.len() { break; }
+            let nombre = cell_str(&rows, ri, block.name_col);
+            if nombre.is_empty() || nombre == "0" { break; }
+            for (code, ci) in &block.ce_cols {
+                if let Some(val) = ce_notas.get(code) {
+                    if let Some(n) = normalize_grade(val) {
+                        s = set_xml_cell(&s, ri, *ci, Some(&json!(n)), "number")?;
+                    }
+                }
+            }
+            ri += 1;
+        }
+        Ok(s)
+    }) as Box<dyn Fn(&str) -> Result<String, String>>)])?;
+
+    load_notas_actividad(&path_clone, &unidad_clone, &tipo_clone, actividad, None)
+}
+
+// ---------------------------------------------------------------------------
 // open external + main
 // ---------------------------------------------------------------------------
 
@@ -1624,7 +1693,7 @@ fn main() {
             excel_verify_file_exists, excel_save_alumnos, excel_get_unidades,
             excel_save_unidades, excel_get_rraa_criterios, excel_save_rraa_criterios,
             excel_get_notas_actividad, excel_get_notas_actividades_tipo,
-            excel_save_notas_actividad, excel_add_actividad,
+            excel_save_notas_actividad, excel_save_ce_notas, excel_add_actividad,
             excel_get_notas_evaluacion, excel_get_notas_evaluacion_alumno,
             excel_get_notas_unidad, excel_get_alumnos_informes, app_open_external
         ])

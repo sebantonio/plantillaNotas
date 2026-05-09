@@ -1114,6 +1114,8 @@
             headerRow.innerHTML = "<span>CE</span><span>Descripcion (editable)</span><span style='text-align:center'>Nota CE</span><span style='text-align:right'>Peso unidad</span>";
             fragment.appendChild(headerRow);
 
+            const firstStudentCeNotas = (currentState && currentState.notas && currentState.notas[0] && currentState.notas[0].ceNotas) || {};
+
             criteriosRa.forEach((c) => {
                 const ci = String(c.colIdx);
                 const pesos = unidadPesos && unidadPesos.ponderaciones && unidadPesos.ponderaciones[ci];
@@ -1123,14 +1125,17 @@
                 const pesoLabel = pesoTotal > 0
                     ? `${Math.round(pesoTotal * 100)}%\n(I:${Math.round(pesoInst * 100)}% E:${Math.round(pesoEmp * 100)}%)`
                     : "—";
+                const codigoLower = (c.codigo || "").toLowerCase();
+                const existingNota = firstStudentCeNotas[codigoLower] || firstStudentCeNotas[c.codigo] || "";
 
                 const row = document.createElement("div");
                 row.className = "criterio-row";
                 row.dataset.colIdx = c.colIdx;
+                row.dataset.codigo = codigoLower;
                 row.innerHTML = `
                     <div class="criterio-code">${escapeHtml(c.codigo)}</div>
                     <input type="text" class="criterio-texto" value="${escapeHtml(c.texto || "")}" aria-label="Descripcion CE ${escapeHtml(c.codigo)}" title="${escapeHtml(c.texto || "")}">
-                    <input type="text" inputmode="decimal" class="criterio-nota" value="" placeholder="0-10" aria-label="Nota CE ${escapeHtml(c.codigo)}">
+                    <input type="text" inputmode="decimal" class="criterio-nota" value="${escapeHtml(existingNota)}" placeholder="0-10" aria-label="Nota CE ${escapeHtml(c.codigo)}">
                     <div class="criterio-peso" style="white-space:pre-line">${escapeHtml(pesoLabel)}</div>
                 `;
                 fragment.appendChild(row);
@@ -1144,11 +1149,17 @@
             if (!currentCriteriosState) return;
 
             const editedTexts = {};
+            const ceNotas = {};
             criteriosContent.querySelectorAll(".criterio-row").forEach((row) => {
                 const colIdx = Number(row.dataset.colIdx);
-                const input = row.querySelector(".criterio-texto");
-                if (input && !Number.isNaN(colIdx)) {
-                    editedTexts[colIdx] = input.value.trim();
+                const codigo = row.dataset.codigo || "";
+                const textoInput = row.querySelector(".criterio-texto");
+                const notaInput = row.querySelector(".criterio-nota");
+                if (textoInput && !Number.isNaN(colIdx)) {
+                    editedTexts[colIdx] = textoInput.value.trim();
+                }
+                if (notaInput && codigo && notaInput.value.trim() !== "") {
+                    ceNotas[codigo] = notaInput.value.trim();
                 }
             });
 
@@ -1166,8 +1177,23 @@
                     criterios: criteriosActualizados,
                     ponderacionesUnidad: currentCriteriosState.ponderacionesUnidad
                 });
-                // Actualizar el estado local con los textos guardados
                 currentCriteriosState.criterios = criteriosActualizados;
+
+                if (Object.keys(ceNotas).length > 0 && currentState) {
+                    const data = await window.electronExcel.saveCeNotas({
+                        unidad: currentState.unidad,
+                        tipo: currentState.tipo,
+                        actividad: currentState.actividad,
+                        ceNotas
+                    });
+                    if (data) {
+                        currentState = data;
+                        currentNotes = (data.notas || []).map((item) => ({ ...item }));
+                        const savedKey = `${currentState.unidad}:${currentState.tipo}:${currentState.actividad}`;
+                        _notasCache.set(savedKey, data);
+                    }
+                }
+
                 showMessage("Criterios guardados correctamente.", "success");
             } catch (error) {
                 showMessage(error.message || "No se pudieron guardar los criterios.", "error");
