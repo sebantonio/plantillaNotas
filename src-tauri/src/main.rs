@@ -850,20 +850,27 @@ fn load_notas_unidad(path: &str, unidad: &str) -> Result<Value, String> {
     let first_row: usize = 4; // fila 5 en Excel
 
     // Detectar columnas de nota final por RA escaneando las primeras 4 filas.
-    // Se buscan celdas cuyo texto comience por "RA" seguido de dígitos (ej: "RA 1", "RA1").
+    // Las cabeceras pueden ser "NOTA RA", "RA 1", "RA1", etc.
     let mut ra_cols: Vec<(i64, usize)> = Vec::new();
     'outer: for scan_ri in 0..rows.len().min(4) {
         let row = rows.get(scan_ri).cloned().unwrap_or_default();
         for ci in (nota_col + 1)..row.len().min(110) {
             let s = cell_val_str(row.get(ci).unwrap_or(&Value::Null));
             let norm = normalize_plain(&s);
-            if norm.starts_with("RA") && norm.len() > 2 {
-                let digits: String = norm.chars().skip(2).filter(|c| c.is_ascii_digit()).collect();
-                if let Ok(n) = digits.parse::<i64>() {
-                    if n >= 1 && n <= 20 && !ra_cols.iter().any(|(_, rc)| *rc == ci) {
-                        ra_cols.push((n, ci));
-                    }
-                }
+            // Detecta "NOTA RA", "NOTA RA 1", "RA 1", "RA1", etc.
+            let is_ra = norm == "NOTA RA"
+                || norm.starts_with("NOTA RA ")
+                || norm.starts_with("RA ")
+                || (norm.starts_with("RA") && norm.len() >= 3
+                    && norm.chars().nth(2).map(|c| c.is_ascii_digit()).unwrap_or(false));
+            if is_ra && !ra_cols.iter().any(|(_, rc)| *rc == ci) {
+                // Extraer número del texto; si no hay, asignar posición secuencial
+                let digits: String = norm.chars()
+                    .skip_while(|c| !c.is_ascii_digit())
+                    .take_while(|c| c.is_ascii_digit())
+                    .collect();
+                let ra_num = digits.parse::<i64>().unwrap_or((ra_cols.len() + 1) as i64);
+                ra_cols.push((ra_num, ci));
             }
         }
         if !ra_cols.is_empty() { break 'outer; }
