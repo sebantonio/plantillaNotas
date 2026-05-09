@@ -609,6 +609,17 @@ function loadNotasActividadFromSelectedFile(unidad = 'U1', tipo = 'practicas', a
     };
   });
 
+  // Cargar RRAA y criterios del workbook ya abierto (sin I/O extra)
+  const unidadIndex = unidades.findIndex((item) => item.codigo === selectedUnidad);
+  const rraaData = extractRraaCriteriosFromWorkbook(workbook);
+  const unidadPonderacion = unidadIndex >= 0 ? rraaData.ponderacionesUnidad[unidadIndex] : null;
+  const criteriosUnidad = rraaData.criterios.map((criterio) => {
+    const peso = unidadPonderacion ? (unidadPonderacion.ponderaciones[criterio.colIdx] || {}) : {};
+    return { ...criterio, ponderacionUnidad: peso };
+  }).filter((c) => (c.ponderacionUnidad.ponderacion || 0) > 0 ||
+    (c.ponderacionUnidad.ponderacionInstituto || 0) > 0 ||
+    (c.ponderacionUnidad.ponderacionEmpresa || 0) > 0);
+
   return {
     filePath: selectedExcelPath,
     fileName: path.basename(selectedExcelPath),
@@ -619,8 +630,70 @@ function loadNotasActividadFromSelectedFile(unidad = 'U1', tipo = 'practicas', a
     tipos,
     actividades: blocks.map(formatActivityBlock),
     notas,
-    block: selectedBlock ? formatActivityBlock(selectedBlock) : null
+    block: selectedBlock ? formatActivityBlock(selectedBlock) : null,
+    rraa: rraaData.rraa,
+    criterios: criteriosUnidad,
+    todasCriterios: rraaData.criterios,
+    ponderacionesUnidad: rraaData.ponderacionesUnidad
   };
+}
+
+function extractRraaCriteriosFromWorkbook(workbook) {
+  if (!workbook.Sheets.DATOS || !workbook.Sheets.PESOS) {
+    return { rraa: [], criterios: [], ponderacionesUnidad: [] };
+  }
+
+  const datosRows = XLSX.utils.sheet_to_json(workbook.Sheets.DATOS, { header: 1, defval: null });
+  const pesosRows = XLSX.utils.sheet_to_json(workbook.Sheets.PESOS, { header: 1, defval: null });
+  const rraaStart = findRraaStartRow(datosRows);
+  const criterionTexts = extractCriterionTexts(datosRows);
+
+  if (rraaStart === -1) return { rraa: [], criterios: [], ponderacionesUnidad: [] };
+
+  const rraa = [];
+  for (let i = rraaStart; i < datosRows.length; i += 1) {
+    const row = datosRows[i] || [];
+    const numero = row[5];
+    const descripcion = row[6];
+    if (!numero && !descripcion) break;
+    rraa.push({ numero: numero || rraa.length + 1, descripcion: descripcion ? String(descripcion).trim() : '' });
+  }
+
+  const criterios = [];
+  for (let colIdx = 0; colIdx < (pesosRows[3] || []).length; colIdx += 1) {
+    const codigo = pesosRows[3] && pesosRows[3][colIdx];
+    if (!isCriterionCode(codigo)) continue;
+    const raNumero = Number(String(codigo).match(/^(\d+)/)[1]);
+    const rraaItem = rraa.find((item) => Number(item.numero) === raNumero);
+    criterios.push({
+      numero: criterios.length + 1,
+      codigo: String(codigo),
+      raNumero,
+      raDescripcion: rraaItem ? rraaItem.descripcion : '',
+      ponderacion: pesosRows[21]?.[colIdx] || 0,
+      ponderacionInstituto: pesosRows[21]?.[colIdx + 1] || 0,
+      ponderacionEmpresa: pesosRows[21]?.[colIdx + 2] || 0,
+      texto: criterionTexts[normalizeCriterionCode(codigo)] || '',
+      colIdx
+    });
+  }
+
+  const ponderacionesUnidad = [];
+  for (let rowIdx = 5; rowIdx < 21; rowIdx += 1) {
+    const row = pesosRows[rowIdx] || [];
+    const nombre = row[0] && String(row[0]) !== '0' ? String(row[0]) : '';
+    const ponderaciones = {};
+    criterios.forEach((criterio) => {
+      ponderaciones[criterio.colIdx] = {
+        ponderacion: row[criterio.colIdx] || 0,
+        ponderacionInstituto: row[criterio.colIdx + 1] || 0,
+        ponderacionEmpresa: row[criterio.colIdx + 2] || 0
+      };
+    });
+    ponderacionesUnidad.push({ numero: rowIdx - 4, rowIdx, nombre, ponderaciones });
+  }
+
+  return { rraa, criterios, ponderacionesUnidad };
 }
 
 function loadNotasActividadesTipoFromSelectedFile(unidad = 'U1', tipo = 'practicas') {

@@ -336,11 +336,35 @@ fn normalize_criterion_code(s: &str) -> String {
 }
 
 fn load_rraa_criterios(path: &str) -> Result<Value, String> {
-    let datos_rows = read_sheet_rows(path, "DATOS")?;
-    let pesos_rows = read_sheet_rows(path, "PESOS")?;
-    let rraa_start = find_rraa_start(&datos_rows).ok_or("No se encontro la seccion RRAA.")?;
+    let (rraa, criterios, ponderaciones_unidad) = extract_rraa_criterios_data(path)
+        .ok_or("No se encontro la seccion RRAA o las hojas DATOS/PESOS.")?;
+    let file_name = Path::new(path).file_name().unwrap_or_default().to_string_lossy().to_string();
+    Ok(json!({ "filePath": path, "fileName": file_name, "rraa": rraa, "criterios": criterios, "ponderacionesUnidad": ponderaciones_unidad }))
+}
 
-    let mut rraa = Vec::new();
+#[tauri::command]
+fn excel_get_rraa_criterios() -> Result<Value, String> {
+    if get_selected_path().is_none() { set_selected_path(find_default_excel_path()); }
+    match get_selected_path() { Some(p) => load_rraa_criterios(&p), None => Ok(Value::Null) }
+}
+
+#[tauri::command]
+fn excel_save_rraa_criterios(payload: Value) -> Result<Value, String> {
+    let path = require_selected_path()?;
+    let rraa = payload["rraa"].as_array().cloned().unwrap_or_default();
+    let criterios = payload["criterios"].as_array().cloned().unwrap_or_default();
+    let pond_unidad = payload["ponderacionesUnidad"].as_array().cloned().unwrap_or_default();
+    save_rraa_criterios_to_file(&path, &rraa, &criterios, &pond_unidad)?;
+    load_rraa_criterios(&path)
+}
+
+// Extrae datos de RRAA/criterios sin metadata de fichero; devuelve (rraa, criterios, ponderaciones_unidad)
+fn extract_rraa_criterios_data(path: &str) -> Option<(Vec<Value>, Vec<Value>, Vec<Value>)> {
+    let datos_rows = read_sheet_rows(path, "DATOS").ok()?;
+    let pesos_rows = read_sheet_rows(path, "PESOS").ok()?;
+    let rraa_start = find_rraa_start(&datos_rows)?;
+
+    let mut rraa: Vec<Value> = Vec::new();
     for i in rraa_start..datos_rows.len() {
         let numero = cell_str(&datos_rows, i, 5);
         let desc = cell_str(&datos_rows, i, 6);
@@ -361,7 +385,7 @@ fn load_rraa_criterios(path: &str) -> Result<Value, String> {
         }
     }
 
-    let mut criterios = Vec::new();
+    let mut criterios: Vec<Value> = Vec::new();
     let pesos_row3 = pesos_rows.get(3).cloned().unwrap_or_default();
     for (col_idx, cell) in pesos_row3.iter().enumerate() {
         let codigo_raw = cell_val_str(cell);
@@ -383,7 +407,7 @@ fn load_rraa_criterios(path: &str) -> Result<Value, String> {
         }));
     }
 
-    let mut ponderaciones_unidad = Vec::new();
+    let mut ponderaciones_unidad: Vec<Value> = Vec::new();
     for row_idx in 5..=20usize {
         let nombre = { let s = cell_str(&pesos_rows, row_idx, 0); if s == "0" { String::new() } else { s } };
         let mut ponderaciones = serde_json::Map::new();
@@ -398,24 +422,7 @@ fn load_rraa_criterios(path: &str) -> Result<Value, String> {
         ponderaciones_unidad.push(json!({ "numero": row_idx - 4, "rowIdx": row_idx, "nombre": nombre, "ponderaciones": ponderaciones }));
     }
 
-    let file_name = Path::new(path).file_name().unwrap_or_default().to_string_lossy().to_string();
-    Ok(json!({ "filePath": path, "fileName": file_name, "rraa": rraa, "criterios": criterios, "ponderacionesUnidad": ponderaciones_unidad }))
-}
-
-#[tauri::command]
-fn excel_get_rraa_criterios() -> Result<Value, String> {
-    if get_selected_path().is_none() { set_selected_path(find_default_excel_path()); }
-    match get_selected_path() { Some(p) => load_rraa_criterios(&p), None => Ok(Value::Null) }
-}
-
-#[tauri::command]
-fn excel_save_rraa_criterios(payload: Value) -> Result<Value, String> {
-    let path = require_selected_path()?;
-    let rraa = payload["rraa"].as_array().cloned().unwrap_or_default();
-    let criterios = payload["criterios"].as_array().cloned().unwrap_or_default();
-    let pond_unidad = payload["ponderacionesUnidad"].as_array().cloned().unwrap_or_default();
-    save_rraa_criterios_to_file(&path, &rraa, &criterios, &pond_unidad)?;
-    load_rraa_criterios(&path)
+    Some((rraa, criterios, ponderaciones_unidad))
 }
 
 // ---------------------------------------------------------------------------
@@ -558,13 +565,42 @@ fn load_notas_actividad(path: &str, unidad: &str, tipo: &str, actividad: i64, ma
     }).collect();
     let unidades = list_unit_sheets(path)?;
     let file_name = Path::new(path).file_name().unwrap_or_default().to_string_lossy().to_string();
+
+    // Cargar RRAA y criterios filtrados para la unidad actual
+    let (rraa, todas_criterios, ponderaciones_unidad, criterios_unidad) =
+        if let Some((rraa, criterios, pu)) = extract_rraa_criterios_data(path) {
+            let unidad_idx = unidades.iter().position(|u| u["codigo"].as_str() == Some(unidad));
+            let criterios_filtrados = if let Some(idx) = unidad_idx {
+                if let Some(pu_entry) = pu.get(idx) {
+                    criterios.iter().filter_map(|c| {
+                        let ci_key = c["colIdx"].as_u64().unwrap_or(0).to_string();
+                        let pesos = pu_entry["ponderaciones"].get(&ci_key)?;
+                        let p = pesos["ponderacion"].as_f64().unwrap_or(0.0);
+                        let pi = pesos["ponderacionInstituto"].as_f64().unwrap_or(0.0);
+                        let pe = pesos["ponderacionEmpresa"].as_f64().unwrap_or(0.0);
+                        if p == 0.0 && pi == 0.0 && pe == 0.0 { return None; }
+                        let mut c2 = c.clone();
+                        if let Value::Object(ref mut obj) = c2 { obj.insert("ponderacionUnidad".to_string(), pesos.clone()); }
+                        Some(c2)
+                    }).collect()
+                } else { vec![] }
+            } else { vec![] };
+            (rraa, criterios, pu, criterios_filtrados)
+        } else {
+            (vec![], vec![], vec![], vec![])
+        };
+
     Ok(json!({
         "filePath": path, "fileName": file_name, "unidad": unidad, "tipo": at.key,
         "actividad": selected_block.map(|b| b.numero).unwrap_or(actividad),
         "unidades": unidades, "tipos": tipos,
         "actividades": blocks.iter().map(format_activity_block).collect::<Vec<_>>(),
         "notas": notas,
-        "block": selected_block.map(format_activity_block)
+        "block": selected_block.map(format_activity_block),
+        "rraa": rraa,
+        "criterios": criterios_unidad,
+        "todasCriterios": todas_criterios,
+        "ponderacionesUnidad": ponderaciones_unidad
     }))
 }
 

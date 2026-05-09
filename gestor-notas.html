@@ -338,6 +338,130 @@
             text-align: center;
         }
 
+        /* --- Criterios desplegable --- */
+        .criterios-section {
+            margin-bottom: 22px;
+        }
+
+        .criterios-details {
+            border: 1px solid #d0d5f8;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .criterios-details > summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 13px 18px;
+            font-weight: 700;
+            color: #4b40b0;
+            background: #eef0fd;
+            cursor: pointer;
+            list-style: none;
+            user-select: none;
+        }
+
+        .criterios-details > summary::-webkit-details-marker { display: none; }
+
+        .criterios-details > summary::after {
+            content: "▼";
+            font-size: 0.75em;
+            transition: transform 0.2s;
+        }
+
+        .criterios-details[open] > summary::after {
+            transform: rotate(180deg);
+        }
+
+        .criterios-body {
+            padding: 18px;
+            background: #fafbff;
+        }
+
+        .ra-group {
+            margin-bottom: 18px;
+        }
+
+        .ra-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .ra-header {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            margin-bottom: 12px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .ra-code {
+            font-weight: 800;
+            color: #667eea;
+            font-size: 0.95em;
+            white-space: nowrap;
+        }
+
+        .ra-desc {
+            color: #374151;
+            font-size: 0.92em;
+        }
+
+        .criterio-row {
+            display: grid;
+            grid-template-columns: 56px 1fr auto;
+            gap: 10px;
+            align-items: start;
+            margin-bottom: 10px;
+        }
+
+        .criterio-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .criterio-code {
+            padding-top: 9px;
+            font-weight: 700;
+            color: #764ba2;
+            font-size: 0.9em;
+            text-align: center;
+        }
+
+        .criterio-texto {
+            width: 100%;
+            min-height: 38px;
+            padding: 8px 10px;
+            border: 1px solid #d7d7d7;
+            border-radius: 6px;
+            font: inherit;
+            font-size: 0.88em;
+            resize: vertical;
+        }
+
+        .criterio-texto:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102,126,234,0.13);
+        }
+
+        .criterio-peso {
+            padding-top: 10px;
+            color: #6b7280;
+            font-size: 0.82em;
+            white-space: nowrap;
+            text-align: right;
+        }
+
+        .criterios-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px solid #e5e7eb;
+        }
+
         @media (max-width: 800px) {
             body {
                 padding: 10px;
@@ -401,6 +525,18 @@
                     </div>
                 </div>
                 <button class="secondary" type="button" id="reloadButton">Recargar</button>
+            </section>
+
+            <section id="criteriosSection" class="criterios-section" style="display:none" aria-label="Criterios de evaluacion">
+                <details class="criterios-details" id="criteriosDetails">
+                    <summary>Criterios de evaluacion del RA asociado a esta unidad</summary>
+                    <div class="criterios-body">
+                        <div id="criteriosContent"></div>
+                        <div class="criterios-actions">
+                            <button class="secondary" type="button" id="saveCriteriosButton">Guardar criterios</button>
+                        </div>
+                    </div>
+                </details>
             </section>
 
             <section class="summary" aria-label="Resumen">
@@ -475,6 +611,7 @@
     <script>
         let currentState = null;
         let currentNotes = [];
+        let currentCriteriosState = null;
         let autoSaveTimeout = null;
         let hayCambiosSinGuardar = false;
         const AUTO_SAVE_DELAY_MS = 15000;
@@ -500,6 +637,9 @@
         const saveButton = document.getElementById("saveButton");
         const reloadButton = document.getElementById("reloadButton");
         const clearButton = document.getElementById("clearButton");
+        const criteriosSection = document.getElementById("criteriosSection");
+        const criteriosContent = document.getElementById("criteriosContent");
+        const saveCriteriosButton = document.getElementById("saveCriteriosButton");
 
         document.addEventListener("DOMContentLoaded", () => {
             if (!window.electronExcel) {
@@ -511,6 +651,7 @@
             reloadButton.addEventListener("click", () => loadNotasConGuardado());
             saveButton.addEventListener("click", saveNotas);
             clearButton.addEventListener("click", clearNotas);
+            saveCriteriosButton.addEventListener("click", saveCriterios);
             unidadSelect.addEventListener("change", () => loadNotasConGuardado({ keepActivity: false }));
             tipoSelect.addEventListener("change", () => loadNotasConGuardado({ keepActivity: false }));
             actividadSelect.addEventListener("change", () => loadNotasConGuardado());
@@ -614,6 +755,7 @@
                 renderControls(data);
                 renderSummary(data);
                 renderActivityMeta(data);
+                renderCriterios(data);
                 renderTable();
                 showMessage("Actividad cargada correctamente.", "success");
 
@@ -824,6 +966,111 @@
             }
         }
 
+        function renderCriterios(data) {
+            const criterios = data.criterios || [];
+
+            if (!criterios.length) {
+                criteriosSection.style.display = "none";
+                currentCriteriosState = null;
+                return;
+            }
+
+            currentCriteriosState = {
+                rraa: data.rraa || [],
+                criterios: data.todasCriterios || criterios,
+                ponderacionesUnidad: data.ponderacionesUnidad || []
+            };
+
+            criteriosSection.style.display = "";
+
+            // Agrupar por RA
+            const byRa = {};
+            criterios.forEach((c) => {
+                if (!byRa[c.raNumero]) {
+                    byRa[c.raNumero] = {
+                        raNumero: c.raNumero,
+                        raDescripcion: c.raDescripcion || "",
+                        criterios: []
+                    };
+                }
+                byRa[c.raNumero].criterios.push(c);
+            });
+
+            const fragment = document.createDocumentFragment();
+            Object.values(byRa).sort((a, b) => a.raNumero - b.raNumero).forEach((ra) => {
+                const group = document.createElement("div");
+                group.className = "ra-group";
+
+                const header = document.createElement("div");
+                header.className = "ra-header";
+                header.innerHTML = `
+                    <span class="ra-code">RA ${escapeHtml(String(ra.raNumero))}</span>
+                    <span class="ra-desc">${escapeHtml(ra.raDescripcion)}</span>
+                `;
+                group.appendChild(header);
+
+                ra.criterios.forEach((c) => {
+                    const pesoTotal = ((c.ponderacionUnidad && c.ponderacionUnidad.ponderacion) || 0);
+                    const pesoInst = ((c.ponderacionUnidad && c.ponderacionUnidad.ponderacionInstituto) || 0);
+                    const pesoEmp = ((c.ponderacionUnidad && c.ponderacionUnidad.ponderacionEmpresa) || 0);
+                    const pesoLabel = pesoTotal > 0
+                        ? `Peso: ${Math.round(pesoTotal * 100)}% (I:${Math.round(pesoInst * 100)}% E:${Math.round(pesoEmp * 100)}%)`
+                        : "";
+
+                    const row = document.createElement("div");
+                    row.className = "criterio-row";
+                    row.dataset.colIdx = c.colIdx;
+                    row.innerHTML = `
+                        <div class="criterio-code">${escapeHtml(c.codigo)}</div>
+                        <textarea class="criterio-texto" rows="2" aria-label="Descripcion criterio ${escapeHtml(c.codigo)}">${escapeHtml(c.texto)}</textarea>
+                        <div class="criterio-peso">${escapeHtml(pesoLabel)}</div>
+                    `;
+                    group.appendChild(row);
+                });
+
+                fragment.appendChild(group);
+            });
+
+            criteriosContent.textContent = "";
+            criteriosContent.appendChild(fragment);
+        }
+
+        async function saveCriterios() {
+            if (!currentCriteriosState) return;
+
+            // Recoger textos editados de los textareas
+            const editedTexts = {};
+            criteriosContent.querySelectorAll(".criterio-row").forEach((row) => {
+                const colIdx = Number(row.dataset.colIdx);
+                const textarea = row.querySelector(".criterio-texto");
+                if (textarea && !Number.isNaN(colIdx)) {
+                    editedTexts[colIdx] = textarea.value.trim();
+                }
+            });
+
+            // Actualizar textos en la copia completa de criterios
+            const criteriosActualizados = currentCriteriosState.criterios.map((c) =>
+                Object.prototype.hasOwnProperty.call(editedTexts, c.colIdx)
+                    ? { ...c, texto: editedTexts[c.colIdx] }
+                    : c
+            );
+
+            try {
+                saveCriteriosButton.disabled = true;
+                showMessage("Guardando criterios...", "info");
+                await window.electronExcel.saveRraaCriterios({
+                    rraa: currentCriteriosState.rraa,
+                    criterios: criteriosActualizados,
+                    ponderacionesUnidad: currentCriteriosState.ponderacionesUnidad
+                });
+                showMessage("Criterios guardados correctamente.", "success");
+            } catch (error) {
+                showMessage(error.message || "No se pudieron guardar los criterios.", "error");
+            } finally {
+                saveCriteriosButton.disabled = false;
+            }
+        }
+
         function clearNotas() {
             currentNotes = currentNotes.map((item) => ({ ...item, nota: "" }));
             renderSummary(currentState);
@@ -960,7 +1207,7 @@
         window.guardarCambiosAntesDeCerrar = guardarCambiosAntesDeCerrar;
 
         function setDisabled(disabled) {
-            [unidadSelect, tipoSelect, actividadSelect, activityTitleInput, includedInput, saveButton, reloadButton, clearButton].forEach((element) => {
+            [unidadSelect, tipoSelect, actividadSelect, activityTitleInput, includedInput, saveButton, reloadButton, clearButton, saveCriteriosButton].forEach((element) => {
                 element.disabled = disabled;
             });
         }
