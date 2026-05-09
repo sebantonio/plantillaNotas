@@ -1187,7 +1187,13 @@
                     actividad: currentState.actividad,
                     nombreActividad: activityTitleInput.value.trim(),
                     incluida: includedInput.checked,
-                    notas: currentNotes
+                    notas: currentNotes.map((item) => {
+                        if (!item._ceModified) {
+                            // Solo campos mínimos — sin ceNotas → Rust no hace escrituras CE
+                            return { numero: item.numero, rowIdx: item.rowIdx, nombre: item.nombre, nota: item.nota };
+                        }
+                        return item;
+                    })
                 });
                 currentState = data;
                 currentNotes = (data.notas || []).map((item) => ({ ...item }));
@@ -1351,6 +1357,7 @@
                     if (!currentNotes[idx].ceNotas) currentNotes[idx].ceNotas = {};
                     const val = inp.value.trim();
                     currentNotes[idx].ceNotas[codigo] = val;
+                    currentNotes[idx]._ceModified = true;
                     // Feedback visual inmediato
                     const v = validateGrade(val);
                     inp.classList.remove("high", "low", "invalid");
