@@ -1,0 +1,56 @@
+{
+  "name": "plantilla-notas-local",
+  "version": "0.1.0",
+  "description": "Aplicacion local para gestionar alumnos en una plantilla Excel sincronizada con OneDrive.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "es.seba.plantillanotas",
+    "productName": "Plantilla Notas Local",
+    "files": [
+      "index.html",
+      "gestor-alumnos.html",
+      "gestor-rraa-criterios.html",
+      "gestor-unidades.html",
+      "gestor-notas.html",
+      "incluir-actividad.html",
+      "visor-notas.html",
+      "visor-actividades.html",
+      "informes.html",
+      "app-bridge.js",
+      "tauri-node-backend.js",
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.0",
+    "jszip": "^3.10.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.1",
+    "electron": "^30.5.1",
+    "electron-builder": "^24.13.3"
+  }
+}
