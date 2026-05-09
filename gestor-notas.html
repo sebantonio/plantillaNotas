@@ -507,6 +507,128 @@
             font-size: 0.92em;
         }
 
+        /* --- Toggle CE por alumno --- */
+        .col-toggle {
+            width: 44px;
+            text-align: center;
+        }
+
+        .btn-toggle-ce {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            min-height: unset;
+            color: #667eea;
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.72em;
+            font-weight: 700;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .btn-toggle-ce.open {
+            color: white;
+            background: #667eea;
+        }
+
+        .ce-detail-row {
+            display: none;
+        }
+
+        .ce-detail-row.open {
+            display: table-row;
+        }
+
+        .ce-detail-row:hover {
+            background: initial;
+        }
+
+        .ce-detail-content {
+            padding: 10px 16px 14px;
+            background: #f0f2fc;
+            border-bottom: 2px solid #d0d5f8;
+        }
+
+        .ce-detail-header {
+            margin-bottom: 8px;
+            font-size: 0.82em;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .ce-detail-list {
+            display: grid;
+            grid-template-columns: 52px 1fr 70px 100px;
+            gap: 4px 10px;
+        }
+
+        .ce-detail-col-header {
+            color: #6b7280;
+            font-size: 0.75em;
+            font-weight: 700;
+            padding: 2px 0 5px;
+            border-bottom: 1px solid #d0d5f8;
+        }
+
+        .ce-detail-code {
+            font-weight: 700;
+            color: #764ba2;
+            font-size: 0.85em;
+            display: flex;
+            align-items: center;
+            padding: 2px 0;
+        }
+
+        .ce-detail-texto {
+            font-size: 0.82em;
+            color: #374151;
+            display: flex;
+            align-items: center;
+            padding: 2px 0;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .ce-detail-nota {
+            font-weight: 700;
+            font-size: 0.9em;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2px 0;
+        }
+
+        .ce-detail-nota.empty { color: #9ca3af; }
+        .ce-detail-nota.high  { color: #059669; }
+        .ce-detail-nota.low   { color: #dc2626; }
+
+        .ce-detail-peso {
+            font-size: 0.75em;
+            color: #6b7280;
+            text-align: right;
+            line-height: 1.3;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            white-space: pre-line;
+            padding: 2px 0;
+        }
+
+        .ce-detail-empty {
+            padding: 10px;
+            color: #6b7280;
+            font-size: 0.85em;
+            text-align: center;
+            grid-column: 1 / -1;
+        }
+
         .criterios-actions {
             display: flex;
             gap: 10px;
@@ -651,11 +773,12 @@
                                 <th class="col-numero">N</th>
                                 <th>Alumno</th>
                                 <th class="col-nota">Nota final</th>
+                                <th class="col-toggle">CE</th>
                             </tr>
                         </thead>
                         <tbody id="notasBody">
                             <tr>
-                                <td class="empty" colspan="3">Cargando datos...</td>
+                                <td class="empty" colspan="4">Cargando datos...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -745,8 +868,8 @@
                 const input = event.target;
                 if (input.classList.contains("nota-input")) {
                     const row = input.closest("tr");
-                    const rowIdx = Array.from(notasBody.children).indexOf(row);
-                    if (rowIdx >= 0 && currentNotes[rowIdx]) {
+                    const rowIdx = Number(row.dataset.studentIdx);
+                    if (!Number.isNaN(rowIdx) && currentNotes[rowIdx]) {
                         currentNotes[rowIdx].nota = input.value;
                         updateNoteValidation(rowIdx, input);
                         renderSummary(currentState);
@@ -769,8 +892,15 @@
 
                 event.preventDefault();
                 const row = input.closest("tr");
-                const startIdx = Array.from(notasBody.children).indexOf(row);
+                const startIdx = Number(row.dataset.studentIdx);
                 applyPastedGrades(startIdx, pastedValues);
+            });
+
+            notasBody.addEventListener("click", (event) => {
+                const btn = event.target.closest(".btn-toggle-ce");
+                if (!btn) return;
+                const idx = Number(btn.dataset.idx);
+                toggleCeRow(idx, btn);
             });
 
             loadNotas();
@@ -945,7 +1075,7 @@
 
         function renderTable() {
             if (!currentNotes.length) {
-                notasBody.innerHTML = '<tr><td class="empty" colspan="3">No hay alumnos en esta actividad.</td></tr>';
+                notasBody.innerHTML = '<tr><td class="empty" colspan="4">No hay alumnos en esta actividad.</td></tr>';
                 return;
             }
 
@@ -955,6 +1085,7 @@
                 const validation = validateGrade(item.nota);
                 const row = document.createElement("tr");
                 row.className = validation.isInvalid ? "invalid-note" : validation.isEmpty ? "pending-note" : "";
+                row.dataset.studentIdx = idx;
                 row.innerHTML = `
                     <td class="numero">${item.numero || idx + 1}</td>
                     <td>${escapeHtml(item.nombre)}</td>
@@ -969,8 +1100,18 @@
                         >
                         ${validation.message ? `<span class="note-help">${escapeHtml(validation.message)}</span>` : ""}
                     </td>
+                    <td class="col-toggle">
+                        <button class="btn-toggle-ce" type="button" data-idx="${idx}" title="Ver criterios de evaluacion" aria-label="Ver CE de ${escapeHtml(item.nombre)}">&#9654;</button>
+                    </td>
                 `;
                 fragment.appendChild(row);
+
+                // Fila CE oculta para este alumno
+                const ceRow = document.createElement("tr");
+                ceRow.className = "ce-detail-row";
+                ceRow.dataset.ceFor = idx;
+                ceRow.innerHTML = '<td colspan="4"><div class="ce-detail-content"></div></td>';
+                fragment.appendChild(ceRow);
             });
 
             // Una sola operación de DOM en lugar de N
@@ -1143,6 +1284,95 @@
 
             criteriosContent.textContent = "";
             criteriosContent.appendChild(fragment);
+            refreshOpenCeRows();
+        }
+
+        function toggleCeRow(idx, btn) {
+            const ceRow = notasBody.querySelector(`tr[data-ce-for="${idx}"]`);
+            if (!ceRow) return;
+            const isOpen = ceRow.classList.contains("open");
+            if (isOpen) {
+                ceRow.classList.remove("open");
+                btn.classList.remove("open");
+                btn.innerHTML = "&#9654;";
+            } else {
+                renderCeContentForStudent(idx, ceRow.querySelector(".ce-detail-content"));
+                ceRow.classList.add("open");
+                btn.classList.add("open");
+                btn.innerHTML = "&#9660;";
+            }
+        }
+
+        function renderCeContentForStudent(idx, container) {
+            if (!currentCriteriosState) {
+                container.innerHTML = '<div class="ce-detail-empty">No hay criterios cargados.</div>';
+                return;
+            }
+            const raNum = Number(raSelect.value);
+            if (!raNum) {
+                container.innerHTML = '<div class="ce-detail-empty">Selecciona un RA en el panel superior para ver los criterios.</div>';
+                return;
+            }
+            const item = currentNotes[idx];
+            if (!item) return;
+
+            const raInfo = currentCriteriosState.rraa.find((r) => Number(r.numero) === raNum);
+            const criteriosRa = currentCriteriosState.criterios.filter((c) => Number(c.raNumero) === raNum);
+
+            if (!criteriosRa.length) {
+                container.innerHTML = '<div class="ce-detail-empty">Este RA no tiene criterios definidos.</div>';
+                return;
+            }
+
+            const unidadActual = currentState && currentState.unidad;
+            const unidades = (currentState && currentState.unidades) || [];
+            const unidadIdx = unidades.findIndex((u) => u.codigo === unidadActual);
+            const unidadPesos = unidadIdx >= 0 ? currentCriteriosState.ponderacionesUnidad[unidadIdx] : null;
+
+            const ceNotas = item.ceNotas || {};
+            const raLabel = raInfo
+                ? `RA ${raInfo.numero}${raInfo.descripcion ? " — " + raInfo.descripcion : ""}`
+                : `RA ${raNum}`;
+
+            let html = `<div class="ce-detail-header">${escapeHtml(raLabel)}</div>`;
+            html += '<div class="ce-detail-list">';
+            html += '<div class="ce-detail-col-header">CE</div>';
+            html += '<div class="ce-detail-col-header">Descripcion</div>';
+            html += '<div class="ce-detail-col-header" style="text-align:center">Nota</div>';
+            html += '<div class="ce-detail-col-header" style="text-align:right">Peso</div>';
+
+            criteriosRa.forEach((c) => {
+                const ci = String(c.colIdx);
+                const pesos = unidadPesos && unidadPesos.ponderaciones && unidadPesos.ponderaciones[ci];
+                const pesoTotal = pesos ? (pesos.ponderacion || 0) : 0;
+                const pesoInst  = pesos ? (pesos.ponderacionInstituto || 0) : 0;
+                const pesoEmp   = pesos ? (pesos.ponderacionEmpresa || 0) : 0;
+                const pesoLabel = pesoTotal > 0
+                    ? `${Math.round(pesoTotal * 100)}%\n(I:${Math.round(pesoInst * 100)}% E:${Math.round(pesoEmp * 100)}%)`
+                    : "—";
+
+                const codigoLower = (c.codigo || "").toLowerCase();
+                const nota = ceNotas[codigoLower] || ceNotas[c.codigo] || "";
+                const notaNum = nota !== "" ? parseFloat(String(nota).replace(",", ".")) : null;
+                const notaClass = nota === "" ? "empty" : notaNum >= 5 ? "high" : "low";
+                const notaDisplay = nota === "" ? "—" : nota;
+
+                html += `<div class="ce-detail-code">${escapeHtml(c.codigo)}</div>`;
+                html += `<div class="ce-detail-texto" title="${escapeHtml(c.texto || "")}">${escapeHtml(c.texto || "")}</div>`;
+                html += `<div class="ce-detail-nota ${notaClass}">${escapeHtml(notaDisplay)}</div>`;
+                html += `<div class="ce-detail-peso">${escapeHtml(pesoLabel)}</div>`;
+            });
+
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function refreshOpenCeRows() {
+            notasBody.querySelectorAll(".ce-detail-row.open").forEach((ceRow) => {
+                const idx = Number(ceRow.dataset.ceFor);
+                const content = ceRow.querySelector(".ce-detail-content");
+                if (content) renderCeContentForStudent(idx, content);
+            });
         }
 
         async function saveCriterios() {

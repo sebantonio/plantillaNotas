@@ -493,11 +493,13 @@ fn find_activity_blocks(rows: &[Vec<Value>], tipo_key: &str) -> Vec<ActivityBloc
         let row1 = rows.get(row_idx + 1).cloned().unwrap_or_default();
         let name_value_col = resolve_name_value_col(&row1, at.base_col);
         let nombre = cell_val_str(row1.get(name_value_col).unwrap_or(&Value::Null)).trim().to_string();
-        let included_val = rows.get(row_idx + 2).and_then(|r| r.get(at.base_col + 1)).map(cell_val_str).unwrap_or_default();
+        // CE codes are in row_idx+2 (the INCLUIDO/FECHA row), not the header row
+        let ce_code_row = rows.get(row_idx + 2).cloned().unwrap_or_default();
+        let included_val = ce_code_row.get(at.base_col + 1).map(cell_val_str).unwrap_or_default();
         let fixed = activity_fixed_cols(at.key);
         let mut ce_cols = Vec::new();
         for ci in (note_col + 1)..=fixed.end {
-            if let Some(v) = header_row_data.get(ci) {
+            if let Some(v) = ce_code_row.get(ci) {
                 let s = cell_val_str(v);
                 let strim = s.trim().to_lowercase();
                 if strim.is_empty() { continue; }
