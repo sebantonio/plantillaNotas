@@ -545,7 +545,7 @@
             }
 
             detailName.textContent = alumno.nombre;
-            detailFinal.textContent = `Nota final: ${alumno.finalDisplay || "-"}`;
+            detailFinal.textContent = `Nota final: ${formatDisplayGrade(alumno.finalDisplay)}`;
             renderRaSelector(alumno);
 
             const criterios = (alumno.criterios || []).filter((criterio) =>
@@ -574,13 +574,13 @@
 
             raDetailSelect.innerHTML = raColumns.map((ra) => {
                 const summary = (alumno.rraa || []).find((item) => Number(item.colIdx) === Number(ra.colIdx));
-                const label = summary && summary.display ? `${ra.label} - ${summary.display}` : ra.label;
+                const label = summary && summary.display ? `${ra.label} - ${formatDisplayGrade(summary.display)}` : ra.label;
                 return `<option value="${ra.colIdx}" ${Number(ra.colIdx) === Number(selectedRaColIdx) ? "selected" : ""}>${escapeHtml(label)}</option>`;
             }).join("");
         }
 
         function gradeBadge(value, display) {
-            const label = display || "-";
+            const label = formatDisplayGrade(display);
             let cls = "empty";
 
             if (typeof value === "number") {
@@ -598,6 +598,13 @@
 
         function formatGrade(value) {
             return Number(value).toFixed(2).replace(".", ",");
+        }
+
+        function formatDisplayGrade(display) {
+            if (!display && display !== 0) return "-";
+            const n = parseFloat(String(display).replace(",", "."));
+            if (isNaN(n)) return display || "-";
+            return n.toFixed(2).replace(".", ",");
         }
 
         function normalize(value) {
