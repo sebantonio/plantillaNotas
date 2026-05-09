@@ -1385,7 +1385,7 @@
             // Solo RAs que tengan al menos un criterio con código no vacío
             const rraaConCriterios = rraa.filter((ra) =>
                 currentCriteriosState.criterios.some(
-                    (c) => Number(c.raNumero) === Number(ra.numero) && (c.codigo || "").trim()
+                    (c) => Number(c.raNumero) === Number(ra.numero) && (c.codigo || "").trim() && (c.texto || "").trim()
                 )
             );
             if (!rraaConCriterios.length) {
@@ -1415,9 +1415,9 @@
                 return `<option value="${escapeHtml(String(ra.numero))}"${sel}>${escapeHtml(label)}</option>`;
             }).join("");
 
-            // Lista CE del RA seleccionado (excluye criterios sin código)
+            // Lista CE del RA seleccionado (excluye criterios sin código o sin texto)
             const criteriosRa = currentCriteriosState.criterios.filter(
-                (c) => Number(c.raNumero) === raNum && (c.codigo || "").trim()
+                (c) => Number(c.raNumero) === raNum && (c.codigo || "").trim() && (c.texto || "").trim()
             );
             const unidadActual = currentState && currentState.unidad;
             const unidades = (currentState && currentState.unidades) || [];
