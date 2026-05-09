@@ -875,15 +875,12 @@
         }
 
         function buildCriteriaSummary(alumno) {
-            const criterios = alumno.criterios || [];
-            const numeric = criterios.filter((criterion) => typeof criterion.nota === "number");
+            // Ignorar criterios sin nota (inactivos/vacíos en el Excel)
+            const criterios = (alumno.criterios || []).filter((criterion) => typeof criterion.nota === "number");
+            const numeric = criterios;
             const passed = numeric.filter((criterion) => criterion.nota >= 5).length;
-            const pending = criterios.length - numeric.length;
             const failed = numeric.filter((criterion) => criterion.nota < 5);
-            const pendingText = pending === 1
-                ? "1 criterio sin nota numérica"
-                : `${pending} criterios sin nota numérica`;
-            const summary = `<strong>${passed}</strong> criterios aprobados de <strong>${numeric.length}</strong> con nota numérica. ${pendingText}.`;
+            const summary = `<strong>${passed}</strong> criterios aprobados de <strong>${numeric.length}</strong>.`;
 
             if (!failed.length) {
                 return `${summary} No hay criterios con nota inferior a 5.`;

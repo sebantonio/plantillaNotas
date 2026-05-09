@@ -563,7 +563,8 @@
             renderRaSelector(alumno);
 
             const criterios = (alumno.criterios || []).filter((criterio) =>
-                Number(criterio.raColIdx) === Number(selectedRaColIdx)
+                Number(criterio.raColIdx) === Number(selectedRaColIdx) &&
+                typeof criterio.nota === "number"
             );
 
             if (!criterios.length) {

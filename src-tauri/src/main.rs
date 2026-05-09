@@ -701,12 +701,57 @@ fn load_notas_evaluacion(path: &str, evaluacion: &str) -> Result<Value, String> 
         alumnos.push(json!({ "rowIdx": row_idx, "numero": alumnos.len() + 1, "nombre": nombre, "final": cell_f64(&rows, row_idx, final_col), "finalDisplay": cell_str(&rows, row_idx, final_col), "rraa": rraa_vals, "criterios": crit_vals }));
     }
 
+    // Filtrar RRAA y criterios sin ningún dato de alumno (columnas vacías = inactivos)
+    let active_crit_cols: std::collections::HashSet<usize> = criteria.iter().filter(|c| {
+        let ci = c["colIdx"].as_u64().unwrap_or(0) as usize;
+        alumnos.iter().any(|a| {
+            a["criterios"].as_array().map(|arr| arr.iter().any(|v| {
+                v["colIdx"].as_u64().map(|x| x as usize) == Some(ci)
+                    && v["nota"].is_number()
+                    && v["nota"].as_f64().unwrap_or(0.0) != 0.0
+            })).unwrap_or(false)
+        })
+    }).map(|c| c["colIdx"].as_u64().unwrap_or(0) as usize).collect();
+
+    let active_ra_cols: std::collections::HashSet<usize> = ra_columns.iter().filter(|ra| {
+        let ci = ra["colIdx"].as_u64().unwrap_or(0) as usize;
+        alumnos.iter().any(|a| {
+            a["rraa"].as_array().map(|arr| arr.iter().any(|v| {
+                v["colIdx"].as_u64().map(|x| x as usize) == Some(ci)
+                    && v["nota"].is_number()
+                    && v["nota"].as_f64().unwrap_or(0.0) != 0.0
+            })).unwrap_or(false)
+        })
+    }).map(|ra| ra["colIdx"].as_u64().unwrap_or(0) as usize).collect();
+
+    let criteria_filtered: Vec<Value> = criteria.into_iter().filter(|c| {
+        active_crit_cols.contains(&(c["colIdx"].as_u64().unwrap_or(0) as usize))
+    }).collect();
+    let ra_columns_filtered: Vec<Value> = ra_columns.into_iter().filter(|ra| {
+        active_ra_cols.contains(&(ra["colIdx"].as_u64().unwrap_or(0) as usize))
+    }).collect();
+    let alumnos_filtered: Vec<Value> = alumnos.into_iter().map(|mut a| {
+        if let Some(arr) = a["criterios"].as_array_mut() {
+            *arr = arr.iter().filter(|v| {
+                let ci = v["colIdx"].as_u64().unwrap_or(0) as usize;
+                active_crit_cols.contains(&ci)
+            }).cloned().collect();
+        }
+        if let Some(arr) = a["rraa"].as_array_mut() {
+            *arr = arr.iter().filter(|v| {
+                let ci = v["colIdx"].as_u64().unwrap_or(0) as usize;
+                active_ra_cols.contains(&ci)
+            }).cloned().collect();
+        }
+        a
+    }).collect();
+
     let title = if normalize_plain(&sheet_name) == "FINAL" { "FINAL".to_string() } else { cell_str(&rows, 2, 0) };
     let file_name = Path::new(path).file_name().unwrap_or_default().to_string_lossy().to_string();
     Ok(json!({
         "filePath": path, "fileName": file_name, "sheetName": sheet_name, "title": title, "evaluacion": evaluacion,
         "layout": { "summaryRowIdx": summary_row_idx, "codeRowIdx": code_row_idx, "firstStudentRowIdx": first_student_row_idx },
-        "raColumns": ra_columns, "criteria": criteria, "alumnos": alumnos
+        "raColumns": ra_columns_filtered, "criteria": criteria_filtered, "alumnos": alumnos_filtered
     }))
 }
 

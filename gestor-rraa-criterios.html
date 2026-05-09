@@ -1123,7 +1123,10 @@
         function mostrarTablaCriterios() {
             const tbody = document.getElementById('criteriosTableBody');
             const emptyState = document.getElementById('emptyStateCriterios');
-            const criteriosVisibles = criteriosActuales.filter((crit) => Number(crit.raNumero) === Number(criterioRaActivo));
+            const criteriosVisibles = criteriosActuales.filter((crit) =>
+                Number(crit.raNumero) === Number(criterioRaActivo) &&
+                (String(crit.texto || "").trim() !== "" || Number(crit.ponderacion) !== 0 || Number(crit.ponderacionInstituto) !== 0 || Number(crit.ponderacionEmpresa) !== 0)
+            );
 
             if (criteriosVisibles.length === 0) {
                 document.getElementById('criteriosTable').style.display = 'none';
@@ -1169,7 +1172,10 @@
                 return;
             }
 
-            const criteriosVisibles = criteriosActuales.filter((crit) => Number(crit.raNumero) === Number(ponderacionRaActiva));
+            const criteriosVisibles = criteriosActuales.filter((crit) =>
+                Number(crit.raNumero) === Number(ponderacionRaActiva) &&
+                (String(crit.texto || "").trim() !== "" || Number(crit.ponderacion) !== 0 || Number(crit.ponderacionInstituto) !== 0 || Number(crit.ponderacionEmpresa) !== 0)
+            );
             tbody.innerHTML = criteriosVisibles.map((crit) => {
                 const critIdx = criteriosActuales.indexOf(crit);
                 const values = unidad.ponderaciones[crit.colIdx] || {
