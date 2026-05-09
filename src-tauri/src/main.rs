@@ -448,6 +448,7 @@ fn get_activity_type(key: &str) -> &'static ActivityType {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 struct ActivityBlock {
     tipo: String, tipo_label: String, numero: i64,
     title_row: usize, number_row: usize, included_row: usize,
