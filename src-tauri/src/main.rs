@@ -789,41 +789,29 @@ fn load_notas_unidad(path: &str, unidad: &str) -> Result<Value, String> {
     // La nota final de la unidad está fija en E5 (índice fila 4, col 4).
     // Los nombres de alumnos están en la columna con "NOMBRE Y APELLIDOS" de la fila 3 (índice 3).
     // Si no se encuentra, buscamos la columna con "NOMBRE" en las primeras 5 filas.
-    let name_col: usize = {
-        let mut found = None;
-        'outer: for ri in 0..5.min(rows.len()) {
-            for ci in 0..rows.get(ri).map(|r| r.len()).unwrap_or(0) {
-                let v = normalize_plain(&cell_str(&rows, ri, ci));
-                if v.contains("NOMBRE") && v.contains("APELLIDO") {
-                    found = Some(ci);
-                    break 'outer;
-                }
-            }
-        }
-        // Si no encontramos "NOMBRE Y APELLIDOS", buscar solo "NOMBRE"
-        if found.is_none() {
-            'outer2: for ri in 0..5.min(rows.len()) {
-                for ci in 0..rows.get(ri).map(|r| r.len()).unwrap_or(0) {
-                    let v = normalize_plain(&cell_str(&rows, ri, ci));
-                    if v.contains("NOMBRE") {
-                        found = Some(ci);
-                        break 'outer2;
-                    }
-                }
-            }
-        }
-        found.unwrap_or(1) // columna B como fallback
-    };
-
-    // Empezar siempre en fila 4 (índice 4 = E5 en Excel)
-    let first_row: usize = 4;
+    // Nombres en col D (índice 3), notas en col E (índice 4), desde fila 5 (índice 4).
+    // Ignorar filas sin nombre en D. Parar al llegar a una fila vacía tras haber recogido alumnos.
+    let name_col: usize = 3; // columna D
+    let first_row: usize = 4; // fila 5 en Excel
 
     let mut alumnos: Vec<Value> = Vec::new();
+    let mut consecutive_empty = 0;
     for ri in first_row..rows.len() {
         let nombre = cell_str(&rows, ri, name_col);
-        if nombre.is_empty() || nombre == "0" { break; }
+        if nombre.is_empty() {
+            consecutive_empty += 1;
+            if consecutive_empty >= 5 && !alumnos.is_empty() { break; }
+            continue;
+        }
+        consecutive_empty = 0;
         let norm = normalize_plain(&nombre);
-        if norm.contains("MEDIA") || norm.contains("PONDERACION") { continue; }
+        // Saltar filas que son etiquetas del Excel, no alumnos
+        if norm.contains("MEDIA") || norm.contains("PONDERACION")
+            || norm.contains("EVALUACION") || norm.contains("EVA")
+            || norm.contains("PESO") || norm.contains("DATO")
+            || norm.contains("SELECCIONA") || norm.contains("FINAL")
+            || norm.starts_with("U") && norm.len() <= 3
+        { continue; }
         let nota = cell_f64(&rows, ri, nota_col);
         let display = cell_str(&rows, ri, nota_col);
         alumnos.push(json!({ "nombre": nombre, "nota": nota, "display": display }));
