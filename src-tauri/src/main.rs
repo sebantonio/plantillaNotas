@@ -882,8 +882,8 @@ fn load_notas_unidad(path: &str, unidad: &str) -> Result<Value, String> {
         .collect();
 
     // Detectar códigos CE entre columnas RA consecutivas.
-    // Los códigos CE están en la fila first_row-2 (misma fila que "NOTA RA").
-    let ce_code_ri = first_row.saturating_sub(2);
+    // Los códigos CE están en first_row (fila 5 del Excel, justo encima de los alumnos).
+    let ce_code_ri = first_row;
     let ce_code_row = rows.get(ce_code_ri).cloned().unwrap_or_default();
     let ra_ce_cols: Vec<Vec<(String, usize)>> = ra_cols.iter().enumerate().map(|(i, (_, ra_ci))| {
         let next_ra_ci = ra_cols.get(i + 1).map(|(_, c)| *c).unwrap_or(110);
