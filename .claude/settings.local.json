@@ -5,7 +5,10 @@
       "Bash(export PATH=\"$PATH:/c/Users/PC/.cargo/bin\")",
       "Bash(cargo check *)",
       "Bash(find / -name \"cargo.exe\" 2>/dev/null | head -10)",
-      "Read(//d//**)"
+      "Read(//d//**)",
+      "WebSearch",
+      "WebFetch(domain:docs.rs)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
