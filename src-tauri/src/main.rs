@@ -108,7 +108,7 @@ fn read_sheet_rows(path: &str, sheet: &str) -> Result<Vec<Vec<Value>>, String> {
                     Data::Float(f) => json!(f),
                     Data::Int(i) => json!(i),
                     Data::Bool(b) => Value::Bool(*b),
-                    Data::DateTime(f) => json!(f),
+                    Data::DateTime(f) => json!(f.as_f64()),
                     Data::Error(_) => Value::Null,
                     _ => Value::Null,
                 })
