@@ -340,8 +340,50 @@
         return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 
-    // ---- RA per-student state ----
+    // ---- RA / CE per-student state ----
     let openRaIdx = null;
+    let openCeRaNum = null;
+    let currentUnitData = null;
+
+    function toggleCeDetail(studentIdx, raNum) {
+        const area = document.getElementById(`ce-area-${studentIdx}`);
+        if (!area) return;
+        const btn = document.getElementById(`ce-btn-${studentIdx}-${raNum}`);
+
+        if (openCeRaNum === raNum) {
+            area.style.display = "none";
+            if (btn) btn.classList.remove("active");
+            openCeRaNum = null;
+            return;
+        }
+
+        // Cerrar anterior
+        if (openCeRaNum !== null) {
+            const prevBtn = document.getElementById(`ce-btn-${studentIdx}-${openCeRaNum}`);
+            if (prevBtn) prevBtn.classList.remove("active");
+        }
+        openCeRaNum = raNum;
+        if (btn) btn.classList.add("active");
+
+        const alumno = (currentUnitData && currentUnitData.alumnos || [])[studentIdx];
+        const raEntry = alumno ? (alumno.raNotas || []).find(r => r.numero === raNum) : null;
+        const ceNotas = raEntry ? (raEntry.ceNotas || []) : [];
+
+        if (!ceNotas.length) {
+            area.innerHTML = `<div class="ce-detail-content"><span style="color:#9ca3af;font-size:0.82rem;">Sin datos CE</span></div>`;
+        } else {
+            const items = ceNotas.map(ce => {
+                const cls = gradeClassDisplay(ce.display) || gradeClass(ce.nota);
+                const val = ce.display ? fmtDisplay(ce.display) : fmt(ce.nota);
+                return `<span class="ce-detail-item">
+                    <span class="ce-detail-label">${esc(ce.codigo)}:</span>
+                    <span class="grade ${cls}">${val}</span>
+                </span>`;
+            }).join("");
+            area.innerHTML = `<div class="ce-detail-content">${items}</div>`;
+        }
+        area.style.display = "";
+    }
 
     function toggleStudentRa(idx) {
         const detailRow = document.getElementById(`ra-detail-${idx}`);
@@ -349,10 +391,11 @@
         if (!detailRow) return;
 
         if (openRaIdx === idx) {
-            // Cerrar
+            // Cerrar RA y CE
             detailRow.style.display = "none";
             if (btn) btn.classList.remove("active");
             openRaIdx = null;
+            openCeRaNum = null;
         } else {
             // Cerrar anterior
             if (openRaIdx !== null) {
