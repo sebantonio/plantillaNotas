@@ -846,14 +846,33 @@ fn load_notas_unidad(path: &str, unidad: &str) -> Result<Value, String> {
     let unidades = list_unit_sheets(path)?;
 
     let nota_col: usize = 4; // columna E = nota final de la unidad
-
-    // La nota final de la unidad está fija en E5 (índice fila 4, col 4).
-    // Los nombres de alumnos están en la columna con "NOMBRE Y APELLIDOS" de la fila 3 (índice 3).
-    // Si no se encuentra, buscamos la columna con "NOMBRE" en las primeras 5 filas.
-    // Nombres en col D (índice 3), notas en col E (índice 4), desde fila 5 (índice 4).
-    // Ignorar filas sin nombre en D. Parar al llegar a una fila vacía tras haber recogido alumnos.
     let name_col: usize = 3; // columna D
     let first_row: usize = 4; // fila 5 en Excel
+
+    // Detectar columnas de nota final por RA escaneando las primeras 4 filas.
+    // Se buscan celdas cuyo texto comience por "RA" seguido de dígitos (ej: "RA 1", "RA1").
+    let mut ra_cols: Vec<(i64, usize)> = Vec::new();
+    'outer: for scan_ri in 0..rows.len().min(4) {
+        let row = rows.get(scan_ri).cloned().unwrap_or_default();
+        for ci in (nota_col + 1)..row.len().min(110) {
+            let s = cell_val_str(row.get(ci).unwrap_or(&Value::Null));
+            let norm = normalize_plain(&s);
+            if norm.starts_with("RA") && norm.len() > 2 {
+                let digits: String = norm.chars().skip(2).filter(|c| c.is_ascii_digit()).collect();
+                if let Ok(n) = digits.parse::<i64>() {
+                    if n >= 1 && n <= 20 && !ra_cols.iter().any(|(_, rc)| *rc == ci) {
+                        ra_cols.push((n, ci));
+                    }
+                }
+            }
+        }
+        if !ra_cols.is_empty() { break 'outer; }
+    }
+    ra_cols.sort_by_key(|(n, _)| *n);
+
+    let ra_cols_json: Vec<Value> = ra_cols.iter()
+        .map(|(n, ci)| json!({ "numero": n, "colIdx": ci, "label": format!("RA {n}") }))
+        .collect();
 
     let mut alumnos: Vec<Value> = Vec::new();
     let mut consecutive_empty = 0;
@@ -875,11 +894,16 @@ fn load_notas_unidad(path: &str, unidad: &str) -> Result<Value, String> {
         { continue; }
         let nota = cell_f64(&rows, ri, nota_col);
         let display = cell_str(&rows, ri, nota_col);
-        alumnos.push(json!({ "nombre": nombre, "nota": nota, "display": display }));
+        let ra_notas: Vec<Value> = ra_cols.iter().map(|(ra_num, ci)| {
+            let n = cell_f64(&rows, ri, *ci);
+            let d = cell_str(&rows, ri, *ci);
+            json!({ "numero": ra_num, "nota": n, "display": d })
+        }).collect();
+        alumnos.push(json!({ "nombre": nombre, "nota": nota, "display": display, "raNotas": ra_notas }));
     }
 
     let file_name = Path::new(path).file_name().unwrap_or_default().to_string_lossy().to_string();
-    Ok(json!({ "filePath": path, "fileName": file_name, "unidad": unidad, "unidades": unidades, "alumnos": alumnos }))
+    Ok(json!({ "filePath": path, "fileName": file_name, "unidad": unidad, "unidades": unidades, "raColumnas": ra_cols_json, "alumnos": alumnos }))
 }
 
 #[tauri::command]

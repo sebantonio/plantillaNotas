@@ -179,6 +179,83 @@
             color: #9ca3af;
             font-style: italic;
         }
+
+        .btn-ra-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-left: 8px;
+            padding: 3px 9px;
+            background: #e0e7ff;
+            border: 1px solid #a5b4fc;
+            border-radius: 6px;
+            font: inherit;
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #3730a3;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+            vertical-align: middle;
+        }
+        .btn-ra-toggle:hover { background: #c7d2fe; border-color: #6366f1; }
+        .btn-ra-toggle.active { background: #6366f1; color: #fff; border-color: #4338ca; }
+
+        .ra-panel {
+            margin: 0 0 4px;
+            border: 1px solid #c7d2fe;
+            border-radius: 8px;
+            background: #f5f3ff;
+            overflow: hidden;
+        }
+
+        .ra-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 16px;
+            background: #eef2ff;
+            border-bottom: 1px solid #c7d2fe;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #3730a3;
+        }
+
+        .ra-panel-close {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            color: #6b7280;
+            padding: 0 4px;
+            line-height: 1;
+        }
+        .ra-panel-close:hover { color: #374151; }
+
+        .ra-panel-table-wrap { overflow-x: auto; }
+
+        .ra-panel-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.88rem;
+        }
+        .ra-panel-table th {
+            background: #e0e7ff;
+            color: #3730a3;
+            font-weight: 800;
+            padding: 7px 12px;
+            text-align: center;
+            border-bottom: 2px solid #c7d2fe;
+            white-space: nowrap;
+        }
+        .ra-panel-table th.col-name { text-align: left; }
+        .ra-panel-table td {
+            padding: 7px 12px;
+            border-bottom: 1px solid #e0e7ff;
+            text-align: center;
+        }
+        .ra-panel-table td.col-name { text-align: left; font-weight: 600; }
+        .ra-panel-table tr:nth-child(even) { background: #f0f4ff; }
+        .ra-panel-table tr:last-child td { border-bottom: none; }
     </style>
 </head>
 <body>
@@ -204,6 +281,7 @@
         Notas de la unidad seleccionada
         <span class="section-subtitle" id="unitLabel"></span>
     </div>
+    <div id="raPanel" style="display:none"></div>
     <div id="unitSection"><div class="loading">Selecciona una unidad...</div></div>
 
     <div class="divider"></div>
@@ -245,8 +323,77 @@
         return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 
+    // ---- RA panel state ----
+    let raOpen = false;
+    let currentUnitData = null;
+
+    function toggleRaPanel() {
+        raOpen = !raOpen;
+        const btn = document.getElementById("btnRaToggle");
+        if (btn) btn.classList.toggle("active", raOpen);
+        renderRaPanel();
+    }
+
+    function closeRaPanel() {
+        raOpen = false;
+        const btn = document.getElementById("btnRaToggle");
+        if (btn) btn.classList.remove("active");
+        renderRaPanel();
+    }
+
+    function renderRaPanel() {
+        const panelEl = document.getElementById("raPanel");
+        if (!raOpen || !currentUnitData) {
+            panelEl.style.display = "none";
+            panelEl.innerHTML = "";
+            return;
+        }
+
+        const raCols = currentUnitData.raColumnas || [];
+        const alumnos = currentUnitData.alumnos || [];
+
+        if (!raCols.length) {
+            panelEl.style.display = "none";
+            return;
+        }
+
+        const headers = raCols.map(ra => `<th>${esc(ra.label)}</th>`).join("");
+
+        const rows = alumnos.map(a => {
+            const raNotas = a.raNotas || [];
+            const cells = raCols.map(ra => {
+                const entry = raNotas.find(r => r.numero === ra.numero);
+                if (!entry) return `<td><span class="grade empty">-</span></td>`;
+                const cls = gradeClassDisplay(entry.display) || gradeClass(entry.nota);
+                const val = entry.display ? fmtDisplay(entry.display) : fmt(entry.nota);
+                return `<td><span class="grade ${cls}">${val}</span></td>`;
+            }).join("");
+            return `<tr><td class="col-name">${esc(a.nombre)}</td>${cells}</tr>`;
+        }).join("");
+
+        panelEl.style.display = "block";
+        panelEl.innerHTML = `
+            <div class="ra-panel">
+                <div class="ra-panel-header">
+                    <span>Notas finales por RA</span>
+                    <button class="ra-panel-close" onclick="closeRaPanel()">✕</button>
+                </div>
+                <div class="ra-panel-table-wrap">
+                    <table class="ra-panel-table">
+                        <thead><tr>
+                            <th class="col-name">Alumno/a</th>
+                            ${headers}
+                        </tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            </div>`;
+    }
+
     function renderUnitTable(data) {
+        currentUnitData = data;
         const alumnos = data.alumnos || [];
+        const raCols = data.raColumnas || [];
         if (!alumnos.length) return `<div class="empty-msg">No hay datos para esta unidad.</div>`;
 
         const rows = alumnos.map(a => {
@@ -258,17 +405,20 @@
             </tr>`;
         }).join("");
 
+        const raBtn = raCols.length
+            ? `<button id="btnRaToggle" class="btn-ra-toggle${raOpen ? " active" : ""}" onclick="toggleRaPanel()">▼ RA</button>`
+            : "";
+
         return `<div class="table-wrap"><table>
             <thead><tr>
                 <th class="col-name">Alumno/a</th>
-                <th>Nota Final Unidad</th>
+                <th>Nota Final Unidad ${raBtn}</th>
             </tr></thead>
             <tbody>${rows}</tbody>
         </table></div>`;
     }
 
     function renderSummaryTable(unitDataList) {
-        // Recolectar todos los alumnos (por nombre)
         const alumnoSet = new Map();
         unitDataList.forEach(ud => {
             (ud.alumnos || []).forEach(a => {
@@ -310,9 +460,12 @@
     async function loadUnit(codigo, label) {
         document.getElementById("unitLabel").textContent = label ? `— ${label}` : "";
         document.getElementById("unitSection").innerHTML = `<div class="loading">Cargando...</div>`;
+        raOpen = false;
+        renderRaPanel();
         try {
             const data = await window.electronExcel.getNotasUnidad({ unidad: codigo });
             document.getElementById("unitSection").innerHTML = renderUnitTable(data || {});
+            renderRaPanel();
         } catch (e) {
             document.getElementById("unitSection").innerHTML = `<div class="error">Error: ${esc(String(e))}</div>`;
         }
@@ -339,7 +492,6 @@
         }
 
         try {
-            // Obtener lista de unidades cargando U1
             const data = await window.electronExcel.getNotasUnidad({ unidad: "U1" });
             if (!data) throw new Error("Sin datos");
 
@@ -360,12 +512,11 @@
                 loadUnit(sel.value, u ? u.label : "");
             });
 
-            // Cargar primera unidad
             const first = unidades[0];
             document.getElementById("unitSection").innerHTML = renderUnitTable(data);
             document.getElementById("unitLabel").textContent = `— ${first.label}`;
+            renderRaPanel();
 
-            // Cargar resumen (todas las unidades)
             loadSummary();
         } catch (e) {
             document.getElementById("unitSection").innerHTML = `<div class="error">Error al cargar: ${esc(String(e))}</div>`;
