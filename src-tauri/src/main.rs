@@ -1373,6 +1373,72 @@ fn copy_activity_merges_xml(sheet_xml: &str, source_start: usize, source_end: us
     else { Ok(sheet_xml.replace("</sheetData>", &format!("</sheetData>{merge_xml}"))) }
 }
 
+// Expande las "shared formulas" de Excel dentro del rango dado.
+// Celdas secundarias tienen <f t="shared" si=N/> (sin fórmula). Sin expandir, al copiar
+// quedan vacías y el Excel se corrompe.
+fn expand_shared_formulas_in_range(sheet_xml: &str, src_row_start: i64, src_row_end: i64, col_start: usize, col_end: usize) -> String {
+    let cell_re = Regex::new(r#"<c\b[^>/]*(?:/>|>[\s\S]*?</c>)"#).unwrap();
+
+    // Paso 1: recopilar masters (celdas con <f t="shared" si=N ref=...>FORMULA</f>)
+    struct Master { formula: String, master_col: String, master_row: i64 }
+    let mut masters: HashMap<String, Master> = HashMap::new();
+
+    for m in cell_re.find_iter(sheet_xml) {
+        let cell = m.as_str();
+        let ref_attr = match get_xml_attr(cell, "r") { Some(r) => r, None => continue };
+        let f_match = Regex::new(r#"<f\b([^>/]*)>([\s\S]*?)</f>"#).unwrap();
+        if let Some(fm) = f_match.captures(cell) {
+            let f_tag_inner = fm.get(1).map(|x| x.as_str()).unwrap_or("");
+            let formula = fm.get(2).map(|x| x.as_str().trim().to_string()).unwrap_or_default();
+            let f_tag = format!("<f {f_tag_inner}>");
+            let t_attr = get_xml_attr(&f_tag, "t");
+            let si_attr = get_xml_attr(&f_tag, "si");
+            let ref2 = get_xml_attr(&f_tag, "ref");
+            if t_attr.as_deref() == Some("shared") && si_attr.is_some() && ref2.is_some() && !formula.is_empty() {
+                let col_part: String = ref_attr.chars().take_while(|c| c.is_ascii_alphabetic()).collect();
+                let row_num: i64 = ref_attr.chars().skip_while(|c| c.is_ascii_alphabetic()).collect::<String>().parse().unwrap_or(0);
+                masters.insert(si_attr.unwrap(), Master { formula, master_col: col_part, master_row: row_num });
+            }
+        }
+    }
+
+    if masters.is_empty() { return sheet_xml.to_string(); }
+
+    // Paso 2: reemplazar celdas secundarias (self-closing <f t="shared" si=N/>) en el rango
+    cell_re.replace_all(sheet_xml, |caps: &regex::Captures| {
+        let cell = &caps[0];
+        let ref_attr = match get_xml_attr(cell, "r") { Some(r) => r, None => return cell.to_string() };
+        let col_part: String = ref_attr.chars().take_while(|c| c.is_ascii_alphabetic()).collect();
+        let row_num: i64 = ref_attr.chars().skip_while(|c| c.is_ascii_alphabetic()).collect::<String>().parse().unwrap_or(0);
+        let col_idx = col_index(&col_part);
+        if col_idx < col_start || col_idx > col_end || row_num < src_row_start || row_num > src_row_end {
+            return cell.to_string();
+        }
+        // Buscar self-closing shared formula: <f ... />
+        let sc_re = Regex::new(r#"<f\b([^>/]*)/>"#).unwrap();
+        if let Some(fm) = sc_re.captures(cell) {
+            let f_inner = fm.get(1).map(|x| x.as_str()).unwrap_or("");
+            let f_tag = format!("<f {f_inner}>");
+            let t_attr = get_xml_attr(&f_tag, "t");
+            let si_attr = get_xml_attr(&f_tag, "si");
+            if t_attr.as_deref() == Some("shared") {
+                if let Some(si) = si_attr {
+                    if let Some(master) = masters.get(&si) {
+                        let row_delta = row_num - master.master_row;
+                        let concrete = Regex::new(r"(\$?[A-Z]{1,3})(\$?)(\d+)").unwrap().replace_all(&master.formula, |c2: &regex::Captures| {
+                            let col = &c2[1]; let abs_row = &c2[2]; let rn: i64 = c2[3].parse().unwrap_or(0);
+                            if !abs_row.is_empty() { c2[0].to_string() } else { format!("{}{}", col, rn + row_delta) }
+                        }).to_string();
+                        let expanded_f = format!("<f>{concrete}</f>");
+                        return cell.replacen(fm.get(0).unwrap().as_str(), &expanded_f, 1);
+                    }
+                }
+            }
+        }
+        cell.to_string()
+    }).to_string()
+}
+
 fn copy_activity_block_xml(sheet_xml: &str, source_start: usize, source_end: usize, target_start: usize,
     type_start_col: usize, type_end_col: usize, number_col: usize, name_value_col: usize,
     included_row_offset: usize, included_col: usize, first_student_row_offset: usize, note_col: usize,
@@ -1380,7 +1446,8 @@ fn copy_activity_block_xml(sheet_xml: &str, source_start: usize, source_end: usi
 ) -> Result<String, String> {
     let row_delta = (target_start as i64) - (source_start as i64);
     let src_s = (source_start + 1) as i64; let src_e = (source_end + 1) as i64;
-    let mut xml = sheet_xml.to_string();
+    // Expandir shared formulas antes de copiar para evitar corrupción del Excel
+    let mut xml = expand_shared_formulas_in_range(sheet_xml, src_s, src_e, type_start_col, type_end_col);
 
     for row_idx in source_start..=source_end {
         let src_row = row_idx + 1;
