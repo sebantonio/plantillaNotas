@@ -92,29 +92,52 @@ fn parse_decimal(v: &Value) -> f64 {
 
 use calamine::{open_workbook_auto, Data, Reader};
 
+fn cell_data_to_value(cell: &Data) -> Value {
+    match cell {
+        Data::Empty => Value::Null,
+        Data::String(s) => Value::String(s.clone()),
+        Data::Float(f) => json!(f),
+        Data::Int(i) => json!(i),
+        Data::Bool(b) => Value::Bool(*b),
+        Data::DateTime(f) => json!(f.as_f64()),
+        Data::Error(_) => Value::Null,
+        _ => Value::Null,
+    }
+}
+
 fn read_sheet_rows(path: &str, sheet: &str) -> Result<Vec<Vec<Value>>, String> {
     let mut wb = open_workbook_auto(path).map_err(|e| e.to_string())?;
     let range = wb
         .worksheet_range(sheet)
         .map_err(|e| format!("Hoja '{sheet}' no encontrada: {e}"))?;
 
-    Ok(range
-        .rows()
-        .map(|row| {
-            row.iter()
-                .map(|cell| match cell {
-                    Data::Empty => Value::Null,
-                    Data::String(s) => Value::String(s.clone()),
-                    Data::Float(f) => json!(f),
-                    Data::Int(i) => json!(i),
-                    Data::Bool(b) => Value::Bool(*b),
-                    Data::DateTime(f) => json!(f.as_f64()),
-                    Data::Error(_) => Value::Null,
-                    _ => Value::Null,
-                })
-                .collect()
-        })
-        .collect())
+    let (row_start, col_start) = range.start().map(|(r, c)| (r as usize, c as usize)).unwrap_or((0, 0));
+    let (row_end, _col_end) = range.end().map(|(r, c)| (r as usize, c as usize)).unwrap_or((0, 0));
+
+    // Build a dense array where result[row_idx] corresponds to Excel row (row_idx + 1).
+    // Calamine's range.rows() skips rows that have no cells in the XML, so we must
+    // use get_value(r, c) to preserve the Excel row-to-index correspondence.
+    let total_rows = if row_end >= row_start { row_end - row_start + 1 } else { 0 };
+    let total_cols = range.width();
+
+    // result[i] must correspond to Excel row (i+1), so pad with row_start empty rows first.
+    let mut result: Vec<Vec<Value>> = vec![vec![]; row_start];
+    for r in 0..total_rows {
+        let abs_row = (row_start + r) as u32;
+        let row: Vec<Value> = (0..total_cols)
+            .map(|c| {
+                let abs_col = (col_start + c) as u32;
+                range.get_value((abs_row, abs_col))
+                    .map(cell_data_to_value)
+                    .unwrap_or(Value::Null)
+            })
+            .collect();
+        // Prepend col_start empty cells so column indices match Excel column indices
+        let mut full_row = vec![Value::Null; col_start];
+        full_row.extend(row);
+        result.push(full_row);
+    }
+    Ok(result)
 }
 
 fn sheet_names(path: &str) -> Result<Vec<String>, String> {
@@ -452,6 +475,7 @@ fn find_activity_blocks(rows: &[Vec<Value>], tipo_key: &str) -> Vec<ActivityBloc
         let number_cell = rows.get(row_idx + 1).and_then(|r| r.get(at.base_col + 1)).cloned().unwrap_or(Value::Null);
         let activity_number: i64 = match &number_cell {
             Value::Number(n) => match n.as_i64().or_else(|| n.as_f64().map(|f| f as i64)) { Some(v) => v, None => continue },
+            Value::String(s) => match s.trim().parse::<f64>() { Ok(f) if f > 0.0 => f as i64, _ => continue },
             _ => continue,
         };
         let header_row_data = rows.get(row_idx + 3).cloned().unwrap_or_default();
