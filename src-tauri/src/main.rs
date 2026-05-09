@@ -786,16 +786,37 @@ fn load_notas_unidad(path: &str, unidad: &str) -> Result<Value, String> {
 
     let nota_col: usize = 4; // columna E = nota final de la unidad
 
-    // Localizar alumnos usando el primer bloque de cualquier tipo
-    let block = ACTIVITY_TYPES.iter().find_map(|t| {
-        let blocks = find_activity_blocks(&rows, t.key);
-        blocks.into_iter().next()
-    });
-
-    let (name_col, first_row) = match block {
-        Some(b) => (b.name_col, b.first_student_row),
-        None => return Ok(json!({ "unidad": unidad, "unidades": unidades, "alumnos": [] })),
+    // La nota final de la unidad está fija en E5 (índice fila 4, col 4).
+    // Los nombres de alumnos están en la columna con "NOMBRE Y APELLIDOS" de la fila 3 (índice 3).
+    // Si no se encuentra, buscamos la columna con "NOMBRE" en las primeras 5 filas.
+    let name_col: usize = {
+        let mut found = None;
+        'outer: for ri in 0..5.min(rows.len()) {
+            for ci in 0..rows.get(ri).map(|r| r.len()).unwrap_or(0) {
+                let v = normalize_plain(&cell_str(&rows, ri, ci));
+                if v.contains("NOMBRE") && v.contains("APELLIDO") {
+                    found = Some(ci);
+                    break 'outer;
+                }
+            }
+        }
+        // Si no encontramos "NOMBRE Y APELLIDOS", buscar solo "NOMBRE"
+        if found.is_none() {
+            'outer2: for ri in 0..5.min(rows.len()) {
+                for ci in 0..rows.get(ri).map(|r| r.len()).unwrap_or(0) {
+                    let v = normalize_plain(&cell_str(&rows, ri, ci));
+                    if v.contains("NOMBRE") {
+                        found = Some(ci);
+                        break 'outer2;
+                    }
+                }
+            }
+        }
+        found.unwrap_or(1) // columna B como fallback
     };
+
+    // Empezar siempre en fila 4 (índice 4 = E5 en Excel)
+    let first_row: usize = 4;
 
     let mut alumnos: Vec<Value> = Vec::new();
     for ri in first_row..rows.len() {
