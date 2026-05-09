@@ -413,6 +413,8 @@
 
     function renderUnitTable(data) {
         openRaIdx = null;
+        openCeRaNum = null;
+        currentUnitData = data;
         const alumnos = data.alumnos || [];
         const raCols = data.raColumnas || [];
         if (!alumnos.length) return `<div class="empty-msg">No hay datos para esta unidad.</div>`;
