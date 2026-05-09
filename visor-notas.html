@@ -490,15 +490,29 @@
             averageGrade.textContent = average === null ? "-" : formatGrade(average);
         }
 
+        function getActiveRaColIdxs() {
+            const alumnos = state.alumnos || [];
+            const active = new Set();
+            alumnos.forEach((alumno) => {
+                (alumno.rraa || []).forEach((ra) => {
+                    if (typeof ra.nota === "number" && ra.nota !== 0) active.add(ra.colIdx);
+                });
+            });
+            return active;
+        }
+
         function renderTable() {
             if (!state) {
                 return;
             }
 
+            const activeColIdxs = getActiveRaColIdxs();
+            const raColumns = (state.raColumns || []).filter((ra) => activeColIdxs.has(ra.colIdx));
+
             notesHead.innerHTML = `
                 <tr>
                     <th class="student-col">Alumno</th>
-                    ${(state.raColumns || []).map((ra) => `<th>${escapeHtml(ra.label)}</th>`).join("")}
+                    ${raColumns.map((ra) => `<th>${escapeHtml(ra.label)}</th>`).join("")}
                     <th>Final</th>
                 </tr>
             `;
@@ -509,14 +523,14 @@
             );
 
             if (!alumnos.length) {
-                notesBody.innerHTML = `<tr><td class="student-col" colspan="${(state.raColumns || []).length + 2}">No hay alumnos para mostrar.</td></tr>`;
+                notesBody.innerHTML = `<tr><td class="student-col" colspan="${raColumns.length + 2}">No hay alumnos para mostrar.</td></tr>`;
                 return;
             }
 
             notesBody.innerHTML = alumnos.map((alumno) => `
                 <tr class="${alumno.rowIdx === selectedRowIdx ? "selected" : ""}" data-row="${alumno.rowIdx}">
                     <td class="student-col">${escapeHtml(alumno.nombre)}</td>
-                    ${(alumno.rraa || []).map((ra) => `<td>${gradeBadge(ra.nota, ra.display)}</td>`).join("")}
+                    ${(alumno.rraa || []).filter((ra) => activeColIdxs.has(ra.colIdx)).map((ra) => `<td>${gradeBadge(ra.nota, ra.display)}</td>`).join("")}
                     <td>${gradeBadge(alumno.final, alumno.finalDisplay)}</td>
                 </tr>
             `).join("");
@@ -566,7 +580,8 @@
         }
 
         function renderRaSelector(alumno) {
-            const raColumns = state.raColumns || [];
+            const activeColIdxs = getActiveRaColIdxs();
+            const raColumns = (state.raColumns || []).filter((ra) => activeColIdxs.has(ra.colIdx));
 
             if (!raColumns.some((ra) => Number(ra.colIdx) === Number(selectedRaColIdx))) {
                 selectedRaColIdx = raColumns[0] ? raColumns[0].colIdx : null;

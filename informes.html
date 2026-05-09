@@ -843,7 +843,7 @@
                     ${gradeBadge(focus.alumno.final, focus.alumno.finalDisplay)}
                 </div>
                 <div class="ra-grid">
-                    ${(focus.alumno.rraa || []).map((ra) => `
+                    ${(focus.alumno.rraa || []).filter(isRaActive).map((ra) => `
                         <div class="ra-item">
                             <span>${escapeHtml(ra.label)}</span>
                             ${gradeBadge(ra.nota, ra.display)}
@@ -862,7 +862,7 @@
                         ${gradeBadge(item.alumno.final, item.alumno.finalDisplay)}
                     </div>
                     <div class="ra-grid">
-                        ${(item.alumno.rraa || []).map((ra) => `
+                        ${(item.alumno.rraa || []).filter(isRaActive).map((ra) => `
                             <div class="ra-item">
                                 <span>${escapeHtml(ra.label)}</span>
                                 ${gradeBadge(ra.nota, ra.display)}
@@ -897,6 +897,10 @@
             return `${summary}<div class="criteria-list" aria-label="Criterios no superados">${failedTags}</div>`;
         }
 
+        function isRaActive(ra) {
+            return typeof ra.nota === "number" && ra.nota !== 0;
+        }
+
         function gradeBadge(value, display) {
             const shown = formatGrade(value, display);
             const classes = ["grade-pill"];
@@ -911,15 +915,14 @@
         }
 
         function formatGrade(value, display) {
-            if (display !== undefined && display !== null && String(display).trim() !== "") {
-                return String(display).trim();
-            }
+            // Prefer the numeric value for controlled formatting; fall back to display if no number
+            const num = typeof value === "number" && !Number.isNaN(value)
+                ? value
+                : (display !== undefined && display !== null ? parseFloat(String(display).replace(",", ".")) : NaN);
 
-            if (typeof value !== "number" || Number.isNaN(value)) {
-                return "-";
-            }
+            if (Number.isNaN(num)) return "-";
 
-            return value.toLocaleString("es-ES", {
+            return num.toLocaleString("es-ES", {
                 minimumFractionDigits: 0,
                 maximumFractionDigits: 2
             });
