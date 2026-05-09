@@ -881,6 +881,23 @@ fn load_notas_unidad(path: &str, unidad: &str) -> Result<Value, String> {
         .map(|(n, ci)| json!({ "numero": n, "colIdx": ci, "label": format!("RA {n}") }))
         .collect();
 
+    // Detectar códigos CE entre columnas RA consecutivas.
+    // Los códigos CE están en la fila first_row-2 (misma fila que "NOTA RA").
+    let ce_code_ri = first_row.saturating_sub(2);
+    let ce_code_row = rows.get(ce_code_ri).cloned().unwrap_or_default();
+    let ra_ce_cols: Vec<Vec<(String, usize)>> = ra_cols.iter().enumerate().map(|(i, (_, ra_ci))| {
+        let next_ra_ci = ra_cols.get(i + 1).map(|(_, c)| *c).unwrap_or(110);
+        let mut ces = Vec::new();
+        for ci in (ra_ci + 1)..next_ra_ci {
+            let s = cell_val_str(ce_code_row.get(ci).unwrap_or(&Value::Null));
+            let strim = s.trim().to_lowercase();
+            if strim.is_empty() { continue; }
+            let code = if strim.ends_with(')') { strim } else { format!("{strim})") };
+            if is_criterion_code(&code) { ces.push((code, ci)); }
+        }
+        ces
+    }).collect();
+
     let mut alumnos: Vec<Value> = Vec::new();
     let mut consecutive_empty = 0;
     for ri in first_row..rows.len() {
@@ -901,10 +918,17 @@ fn load_notas_unidad(path: &str, unidad: &str) -> Result<Value, String> {
         { continue; }
         let nota = cell_f64(&rows, ri, nota_col);
         let display = cell_str(&rows, ri, nota_col);
-        let ra_notas: Vec<Value> = ra_cols.iter().map(|(ra_num, ci)| {
+        let ra_notas: Vec<Value> = ra_cols.iter().enumerate().map(|(i, (ra_num, ci))| {
             let n = cell_f64(&rows, ri, *ci);
             let d = cell_str(&rows, ri, *ci);
-            json!({ "numero": ra_num, "nota": n, "display": d })
+            let ce_notas: Vec<Value> = ra_ce_cols.get(i).map(|ces| {
+                ces.iter().map(|(code, ce_ci)| {
+                    let ce_n = cell_f64(&rows, ri, *ce_ci);
+                    let ce_d = cell_str(&rows, ri, *ce_ci);
+                    json!({ "codigo": code, "nota": ce_n, "display": ce_d })
+                }).collect()
+            }).unwrap_or_default();
+            json!({ "numero": ra_num, "nota": n, "display": d, "ceNotas": ce_notas })
         }).collect();
         alumnos.push(json!({ "nombre": nombre, "nota": nota, "display": display, "raNotas": ra_notas }));
     }
