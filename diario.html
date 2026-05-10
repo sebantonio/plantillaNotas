@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diario de Actividades</title>
+    <script src="app-bridge.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #f3f6fb;
+            --panel: #ffffff;
+            --text: #172033;
+            --muted: #61708a;
+            --line: #d8e1ee;
+            --primary: #6366f1;
+            --primary-dark: #4338ca;
+            --danger: #dc2626;
+            --ok: #16a34a;
+        }
+
+        body {
+            min-height: 100vh;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--text);
+            background: var(--bg);
+            padding: 26px;
+        }
+
+        .shell { width: min(1100px, 100%); margin: 0 auto; }
+
+        .page-nav {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .nav-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 16px;
+            border-radius: 8px;
+            border: 1.5px solid var(--line);
+            background: var(--panel);
+            color: var(--text);
+            font-size: 0.88rem;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .nav-button:hover { border-color: var(--primary); background: #f0f0ff; }
+
+        .page-header { margin-bottom: 24px; }
+        .page-header h1 { font-size: 1.6rem; font-weight: 700; color: var(--text); }
+        .module-name { font-size: 0.9rem; color: var(--muted); margin-top: 4px; }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 1fr 1.6fr;
+            gap: 24px;
+            align-items: start;
+        }
+
+        .card {
+            background: var(--panel);
+            border-radius: 14px;
+            border: 1.5px solid var(--line);
+            padding: 22px;
+        }
+
+        .card-title {
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 16px;
+        }
+
+        /* Calendario */
+        .calendar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .calendar-header button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.1rem;
+            color: var(--muted);
+            padding: 4px 8px;
+            border-radius: 6px;
+        }
+        .calendar-header button:hover { background: #f0f0ff; color: var(--primary); }
+        .calendar-month-label { font-weight: 600; font-size: 0.95rem; color: var(--text); }
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 2px;
+            text-align: center;
+        }
+        .cal-day-name {
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--muted);
+            padding: 4px 0;
+        }
+        .cal-day {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.82rem;
+            border-radius: 7px;
+            cursor: pointer;
+            border: 1.5px solid transparent;
+            transition: background 0.1s, border-color 0.1s;
+        }
+        .cal-day:hover:not(.empty) { background: #f0f0ff; border-color: var(--primary); }
+        .cal-day.empty { cursor: default; }
+        .cal-day.today { background: #ede9fe; color: var(--primary); font-weight: 700; }
+        .cal-day.selected { background: var(--primary); color: #fff; border-color: var(--primary-dark); }
+        .cal-day.has-entries { position: relative; }
+        .cal-day.has-entries::after {
+            content: '';
+            position: absolute;
+            bottom: 3px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: var(--ok);
+        }
+        .cal-day.selected.has-entries::after { background: #fff; }
+
+        /* Hora selector */
+        .hora-selector { margin-top: 16px; }
+        .hora-selector label { font-size: 0.82rem; color: var(--muted); font-weight: 600; display: block; margin-bottom: 8px; }
+        .hora-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
+        .hora-btn {
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1.5px solid var(--line);
+            background: var(--panel);
+            color: var(--text);
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: all 0.1s;
+        }
+        .hora-btn:hover { border-color: var(--primary); background: #f0f0ff; }
+        .hora-btn.active { background: var(--primary); color: #fff; border-color: var(--primary-dark); }
+
+        /* Formulario entrada */
+        .form-group { margin-bottom: 16px; }
+        .form-group label { font-size: 0.82rem; color: var(--muted); font-weight: 600; display: block; margin-bottom: 6px; }
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 9px 12px;
+            border-radius: 9px;
+            border: 1.5px solid var(--line);
+            font-family: inherit;
+            font-size: 0.9rem;
+            color: var(--text);
+            background: #fafcff;
+            transition: border-color 0.15s;
+            resize: none;
+        }
+        .form-group input:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            background: #fff;
+        }
+        .form-group input[readonly] {
+            background: #f3f6fb;
+            color: var(--muted);
+            cursor: default;
+        }
+
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 22px;
+            border-radius: 9px;
+            border: none;
+            background: var(--primary);
+            color: #fff;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s;
+            width: 100%;
+            justify-content: center;
+        }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Entradas del día seleccionado */
+        .entries-section { margin-top: 0; }
+        .entries-empty { color: var(--muted); font-size: 0.88rem; text-align: center; padding: 20px 0; }
+        .entry-item {
+            border: 1.5px solid var(--line);
+            border-radius: 10px;
+            padding: 12px 14px;
+            margin-bottom: 10px;
+            position: relative;
+        }
+        .entry-item:last-child { margin-bottom: 0; }
+        .entry-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .entry-hora {
+            background: #ede9fe;
+            color: var(--primary-dark);
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 5px;
+        }
+        .entry-module {
+            font-size: 0.78rem;
+            color: var(--muted);
+        }
+        .entry-text { font-size: 0.88rem; line-height: 1.5; white-space: pre-wrap; }
+        .entry-delete {
+            position: absolute;
+            top: 8px;
+            right: 10px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--muted);
+            font-size: 0.85rem;
+            padding: 2px 5px;
+            border-radius: 5px;
+        }
+        .entry-delete:hover { background: #fee2e2; color: var(--danger); }
+
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--ok);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            opacity: 0;
+            transform: translateY(8px);
+            transition: opacity 0.25s, transform 0.25s;
+            pointer-events: none;
+            z-index: 100;
+        }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.error { background: var(--danger); }
+
+        #selectedDateLabel {
+            font-size: 0.88rem;
+            color: var(--muted);
+            margin-bottom: 14px;
+        }
+
+        .selected-date-display {
+            font-weight: 700;
+            color: var(--primary);
+        }
+    </style>
+</head>
+<body>
+<div class="shell">
+    <nav class="page-nav">
+        <a href="index.html" class="nav-button">← Inicio</a>
+    </nav>
+
+    <div class="page-header">
+        <h1>📓 Diario de Actividades</h1>
+        <div class="module-name" id="moduleNameDisplay">Módulo: —</div>
+    </div>
+
+    <div class="layout">
+        <!-- Izquierda: Calendario + hora + form -->
+        <div>
+            <div class="card">
+                <div class="card-title">Fecha</div>
+                <div class="calendar-header">
+                    <button id="prevMonth" title="Mes anterior">‹</button>
+                    <span class="calendar-month-label" id="calMonthLabel"></span>
+                    <button id="nextMonth" title="Mes siguiente">›</button>
+                </div>
+                <div class="calendar-grid" id="calGrid"></div>
+
+                <div class="hora-selector">
+                    <label>Hora de clase</label>
+                    <div class="hora-buttons" id="horaButtons">
+                        <button class="hora-btn" data-hora="1ª">1ª</button>
+                        <button class="hora-btn" data-hora="2ª">2ª</button>
+                        <button class="hora-btn" data-hora="3ª">3ª</button>
+                        <button class="hora-btn" data-hora="4ª">4ª</button>
+                        <button class="hora-btn" data-hora="5ª">5ª</button>
+                        <button class="hora-btn" data-hora="6ª">6ª</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top:16px">
+                <div class="card-title">Nueva entrada</div>
+                <div class="form-group">
+                    <label>Fecha seleccionada</label>
+                    <input type="text" id="selectedDateInput" readonly placeholder="Selecciona un día">
+                </div>
+                <div class="form-group">
+                    <label>Módulo</label>
+                    <input type="text" id="moduleInput" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Actividad realizada</label>
+                    <textarea id="actividadInput" rows="5" placeholder="Describe la actividad realizada en esta sesión…"></textarea>
+                </div>
+                <button class="btn-primary" id="saveBtn" disabled>Guardar entrada</button>
+            </div>
+        </div>
+
+        <!-- Derecha: Entradas del día -->
+        <div class="card entries-section">
+            <div class="card-title">Entradas del día</div>
+            <div id="selectedDateLabel">Selecciona un día en el calendario</div>
+            <div id="entriesList"></div>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(async function () {
+    const bridge = window.electronExcel;
+
+    // ── Estado ──────────────────────────────────────────────────────────────
+    let today = new Date();
+    let viewYear = today.getFullYear();
+    let viewMonth = today.getMonth();
+    let selectedDate = null; // "YYYY-MM-DD"
+    let selectedHora = null;
+    let moduleName = '';
+    let allEntries = []; // [{fecha, hora, modulo, texto, fila}]
+
+    // ── Init ─────────────────────────────────────────────────────────────────
+    async function init() {
+        if (!bridge) { showToast('No hay conexión con el archivo Excel.', true); return; }
+        try {
+            const res = await bridge.getDiarioData();
+            moduleName = res.modulo || '';
+            allEntries = res.entradas || [];
+        } catch (e) {
+            showToast('Error al cargar el diario.', true);
+        }
+        document.getElementById('moduleNameDisplay').textContent = 'Módulo: ' + (moduleName || '—');
+        document.getElementById('moduleInput').value = moduleName;
+        renderCalendar();
+        selectDate(formatDate(today));
+    }
+
+    // ── Calendario ───────────────────────────────────────────────────────────
+    const DAY_NAMES = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'];
+    const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+    function formatDate(d) {
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+
+    function datesWithEntries() {
+        return new Set(allEntries.map(e => e.fecha));
+    }
+
+    function renderCalendar() {
+        document.getElementById('calMonthLabel').textContent = `${MONTH_NAMES[viewMonth]} ${viewYear}`;
+        const grid = document.getElementById('calGrid');
+        grid.innerHTML = '';
+
+        DAY_NAMES.forEach(n => {
+            const el = document.createElement('div');
+            el.className = 'cal-day-name';
+            el.textContent = n;
+            grid.appendChild(el);
+        });
+
+        const firstDay = new Date(viewYear, viewMonth, 1);
+        // Monday-based: 0=Mon,...,6=Sun
+        let startOffset = (firstDay.getDay() + 6) % 7;
+        const totalDays = new Date(viewYear, viewMonth + 1, 0).getDate();
+        const todayStr = formatDate(today);
+        const withEntries = datesWithEntries();
+
+        for (let i = 0; i < startOffset; i++) {
+            const el = document.createElement('div');
+            el.className = 'cal-day empty';
+            grid.appendChild(el);
+        }
+
+        for (let d = 1; d <= totalDays; d++) {
+            const dateStr = `${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const el = document.createElement('div');
+            el.className = 'cal-day';
+            el.textContent = d;
+            if (dateStr === todayStr) el.classList.add('today');
+            if (dateStr === selectedDate) el.classList.add('selected');
+            if (withEntries.has(dateStr)) el.classList.add('has-entries');
+            el.addEventListener('click', () => selectDate(dateStr));
+            grid.appendChild(el);
+        }
+    }
+
+    function selectDate(dateStr) {
+        selectedDate = dateStr;
+        document.getElementById('selectedDateInput').value = dateStr;
+        renderCalendar();
+        renderEntries();
+        updateSaveBtn();
+    }
+
+    document.getElementById('prevMonth').addEventListener('click', () => {
+        viewMonth--;
+        if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+        renderCalendar();
+    });
+    document.getElementById('nextMonth').addEventListener('click', () => {
+        viewMonth++;
+        if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+        renderCalendar();
+    });
+
+    // ── Hora ─────────────────────────────────────────────────────────────────
+    document.getElementById('horaButtons').addEventListener('click', e => {
+        const btn = e.target.closest('.hora-btn');
+        if (!btn) return;
+        document.querySelectorAll('.hora-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedHora = btn.dataset.hora;
+        updateSaveBtn();
+    });
+
+    // ── Guardar ───────────────────────────────────────────────────────────────
+    function updateSaveBtn() {
+        const ok = selectedDate && selectedHora && document.getElementById('actividadInput').value.trim();
+        document.getElementById('saveBtn').disabled = !ok;
+    }
+
+    document.getElementById('actividadInput').addEventListener('input', updateSaveBtn);
+
+    document.getElementById('saveBtn').addEventListener('click', async () => {
+        const texto = document.getElementById('actividadInput').value.trim();
+        if (!selectedDate || !selectedHora || !texto) return;
+        const btn = document.getElementById('saveBtn');
+        btn.disabled = true;
+        try {
+            const res = await bridge.saveDiarioEntrada({ fecha: selectedDate, hora: selectedHora, modulo: moduleName, texto });
+            allEntries = res.entradas || allEntries;
+            document.getElementById('actividadInput').value = '';
+            selectedHora = null;
+            document.querySelectorAll('.hora-btn').forEach(b => b.classList.remove('active'));
+            renderCalendar();
+            renderEntries();
+            showToast('Entrada guardada correctamente.');
+        } catch (e) {
+            showToast('Error al guardar: ' + e, true);
+        }
+        updateSaveBtn();
+    });
+
+    // ── Entradas ──────────────────────────────────────────────────────────────
+    function renderEntries() {
+        const container = document.getElementById('entriesList');
+        const label = document.getElementById('selectedDateLabel');
+
+        if (!selectedDate) {
+            label.innerHTML = 'Selecciona un día en el calendario';
+            container.innerHTML = '';
+            return;
+        }
+
+        const [y, m, d] = selectedDate.split('-');
+        const dateLabel = `${d}/${m}/${y}`;
+        label.innerHTML = `Entradas del <span class="selected-date-display">${dateLabel}</span>`;
+
+        const dayEntries = allEntries.filter(e => e.fecha === selectedDate);
+        if (dayEntries.length === 0) {
+            container.innerHTML = '<div class="entries-empty">No hay entradas para este día.</div>';
+            return;
+        }
+
+        container.innerHTML = '';
+        dayEntries.forEach((entry, idx) => {
+            const el = document.createElement('div');
+            el.className = 'entry-item';
+            el.innerHTML = `
+                <div class="entry-meta">
+                    <span class="entry-hora">${entry.hora}</span>
+                    <span class="entry-module">${entry.modulo || moduleName}</span>
+                </div>
+                <div class="entry-text">${escapeHtml(entry.texto)}</div>
+                <button class="entry-delete" data-fila="${entry.fila}" title="Eliminar">✕</button>
+            `;
+            el.querySelector('.entry-delete').addEventListener('click', async () => {
+                try {
+                    const res = await bridge.deleteDiarioEntrada({ fila: entry.fila });
+                    allEntries = res.entradas || allEntries;
+                    renderCalendar();
+                    renderEntries();
+                    showToast('Entrada eliminada.');
+                } catch (e) {
+                    showToast('Error al eliminar: ' + e, true);
+                }
+            });
+            container.appendChild(el);
+        });
+    }
+
+    function escapeHtml(s) {
+        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    // ── Toast ─────────────────────────────────────────────────────────────────
+    function showToast(msg, isError = false) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = 'toast' + (isError ? ' error' : '') + ' show';
+        setTimeout(() => t.className = 'toast' + (isError ? ' error' : ''), 2500);
+    }
+
+    init();
+})();
+</script>
+</body>
+</html>

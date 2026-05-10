@@ -35,9 +35,6 @@
     getAlumnosInformes: () => invoke("excel_get_alumnos_informes"),
     setSelectedFile: (filePath) => invoke("excel_set_selected_file", { filePath }),
     verifyFileExists: (filePath) => invoke("excel_verify_file_exists", { filePath }),
-    openExternal: (url) => invoke("app_open_external", { url }),
-    getDiarioData: () => invoke("excel_get_diario"),
-    saveDiarioEntrada: (payload) => invoke("excel_save_diario_entrada", { payload }),
-    deleteDiarioEntrada: (payload) => invoke("excel_delete_diario_entrada", { payload })
+    openExternal: (url) => invoke("app_open_external", { url })
   };
 })();
