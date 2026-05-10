@@ -386,10 +386,13 @@
             moduleName = res.modulo || '';
             allEntries = res.entradas || [];
         } catch (e) {
-            showToast('Error al cargar el diario.', true);
+            // sin archivo seleccionado: continuar sin módulo
         }
         document.getElementById('moduleNameDisplay').textContent = 'Módulo: ' + (moduleName || '—');
         document.getElementById('moduleInput').value = moduleName;
+        // Pre-seleccionar primera hora
+        const firstHora = document.querySelector('.hora-btn');
+        if (firstHora) { firstHora.classList.add('active'); selectedHora = firstHora.dataset.hora; }
         renderCalendar();
         selectDate(formatDate(today));
     }

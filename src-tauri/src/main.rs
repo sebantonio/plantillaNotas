@@ -1848,7 +1848,7 @@ fn excel_get_diario() -> Result<Value, String> {
 
     // Nombre del módulo desde DATOS B2
     let datos_rows = read_sheet_rows(&path, "DATOS")?;
-    let modulo = cell_str(&datos_rows, 1, 1); // fila idx=1 → fila 2, col idx=1 → col B
+    let modulo = cell_str(&datos_rows, 1, 0); // A2
 
     // Intentar leer hoja Diario (puede no existir aún)
     // Columnas: A=fecha, B=hora, C=modulo, D=texto, E=tarea, F=estado,
