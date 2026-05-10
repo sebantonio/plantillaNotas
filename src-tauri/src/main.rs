@@ -1851,6 +1851,8 @@ fn excel_get_diario() -> Result<Value, String> {
     let modulo = cell_str(&datos_rows, 1, 1); // fila idx=1 → fila 2, col idx=1 → col B
 
     // Intentar leer hoja Diario (puede no existir aún)
+    // Columnas: A=fecha, B=hora, C=modulo, D=texto, E=tarea, F=estado,
+    //           G=incidencia, H=incidenciaTipo, I=incidenciaAlumno, J=incidenciaDesc
     let entradas: Vec<Value> = match read_sheet_rows(&path, DIARIO_SHEET) {
         Ok(rows) => rows.iter().enumerate()
             .skip(1) // skip cabecera
@@ -1859,12 +1861,13 @@ fn excel_get_diario() -> Result<Value, String> {
                     && !cell_val_str(row.get(0).unwrap_or(&Value::Null)).is_empty()
             })
             .map(|(ri, row)| {
+                let cv = |i: usize| cell_val_str(row.get(i).unwrap_or(&Value::Null));
                 json!({
                     "fila": ri,
-                    "fecha": cell_val_str(row.get(0).unwrap_or(&Value::Null)),
-                    "hora": cell_val_str(row.get(1).unwrap_or(&Value::Null)),
-                    "modulo": cell_val_str(row.get(2).unwrap_or(&Value::Null)),
-                    "texto": cell_val_str(row.get(3).unwrap_or(&Value::Null)),
+                    "fecha": cv(0), "hora": cv(1), "modulo": cv(2), "texto": cv(3),
+                    "tarea": cv(4), "estado": cv(5),
+                    "incidencia": cv(6), "incidenciaTipo": cv(7),
+                    "incidenciaAlumno": cv(8), "incidenciaDesc": cv(9),
                 })
             })
             .collect(),
@@ -1878,61 +1881,60 @@ fn excel_get_diario() -> Result<Value, String> {
 #[tauri::command]
 fn excel_save_diario_entrada(payload: Value) -> Result<Value, String> {
     let path = require_selected_path()?;
-    let fecha = payload["fecha"].as_str().ok_or("Falta fecha")?.to_string();
-    let hora = payload["hora"].as_str().ok_or("Falta hora")?.to_string();
-    let modulo = payload["modulo"].as_str().unwrap_or("").to_string();
-    let texto = payload["texto"].as_str().ok_or("Falta texto")?.to_string();
+    let gs = |k: &str| payload[k].as_str().unwrap_or("").to_string();
+    let fecha = gs("fecha"); if fecha.is_empty() { return Err("Falta fecha".into()); }
+    let hora = gs("hora"); if hora.is_empty() { return Err("Falta hora".into()); }
+    let modulo = gs("modulo"); let texto = gs("texto");
+    let tarea = gs("tarea"); let estado = gs("estado");
+    let incidencia = gs("incidencia"); let inc_tipo = gs("incidenciaTipo");
+    let inc_alumno = gs("incidenciaAlumno"); let inc_desc = gs("incidenciaDesc");
 
-    // Crear hoja Diario en el XLSX si aún no existe
     ensure_diario_sheet(&path)?;
 
-    // Determinar fila de inserción: siguiente fila vacía después de cabecera
     let existing_rows = match read_sheet_rows(&path, DIARIO_SHEET) {
-        Ok(rows) => rows,
-        Err(_) => vec![],
+        Ok(rows) => rows, Err(_) => vec![],
     };
-
-    // Si la hoja no existe o está vacía, necesitamos crearla/añadir cabecera
     let need_header = existing_rows.len() < 2
         || cell_str(&existing_rows, 0, 0).to_uppercase() != "FECHA";
-
-    // Última fila de datos (skip cabecera idx=0)
-    let last_data_row = if existing_rows.len() <= 1 {
-        1 // fila idx=1 (Excel fila 2) es la primera de datos
-    } else {
-        let last = (1..existing_rows.len())
-            .rev()
-            .find(|&i| !cell_str(&existing_rows, i, 0).is_empty())
-            .unwrap_or(0);
+    let last_data_row = if existing_rows.len() <= 1 { 1 } else {
+        let last = (1..existing_rows.len()).rev()
+            .find(|&i| !cell_str(&existing_rows, i, 0).is_empty()).unwrap_or(0);
         last + 1
     };
     let insert_row = last_data_row.max(1);
 
-    let fecha_v = json!(fecha);
-    let hora_v = json!(hora);
-    let modulo_v = json!(modulo);
-    let texto_v = json!(texto);
-    let need_header_flag = need_header;
+    let (fv, hv, mv, tv, tav, ev, iv, itv, iav, idv) = (
+        json!(fecha), json!(hora), json!(modulo), json!(texto),
+        json!(tarea), json!(estado), json!(incidencia),
+        json!(inc_tipo), json!(inc_alumno), json!(inc_desc),
+    );
+    let nhf = need_header;
 
     edit_workbook_sheets_xml(&path, vec![(DIARIO_SHEET, Box::new(move |xml: &str| {
         let mut s = xml.to_string();
-        if need_header_flag {
-            s = set_xml_cell(&s, 0, 0, Some(&json!("FECHA")), "text")?;
-            s = set_xml_cell(&s, 0, 1, Some(&json!("HORA")), "text")?;
-            s = set_xml_cell(&s, 0, 2, Some(&json!("MODULO")), "text")?;
-            s = set_xml_cell(&s, 0, 3, Some(&json!("ACTIVIDAD")), "text")?;
+        if nhf {
+            for (ci, h) in ["FECHA","HORA","MODULO","ACTIVIDAD","TAREA","ESTADO",
+                             "INCIDENCIA","INC_TIPO","INC_ALUMNO","INC_DESC"].iter().enumerate() {
+                s = set_xml_cell(&s, 0, ci, Some(&json!(h)), "text")?;
+            }
         }
-        s = set_xml_cell(&s, insert_row, 0, Some(&fecha_v), "text")?;
-        s = set_xml_cell(&s, insert_row, 1, Some(&hora_v), "text")?;
-        s = set_xml_cell(&s, insert_row, 2, Some(&modulo_v), "text")?;
-        s = set_xml_cell(&s, insert_row, 3, Some(&texto_v), "text")?;
+        s = set_xml_cell(&s, insert_row, 0, Some(&fv), "text")?;
+        s = set_xml_cell(&s, insert_row, 1, Some(&hv), "text")?;
+        s = set_xml_cell(&s, insert_row, 2, Some(&mv), "text")?;
+        s = set_xml_cell(&s, insert_row, 3, Some(&tv), "text")?;
+        s = set_xml_cell(&s, insert_row, 4, if tav.as_str()==Some("") { None } else { Some(&tav) }, "text")?;
+        s = set_xml_cell(&s, insert_row, 5, if ev.as_str()==Some("") { None } else { Some(&ev) }, "text")?;
+        s = set_xml_cell(&s, insert_row, 6, if iv.as_str()==Some("") { None } else { Some(&iv) }, "text")?;
+        s = set_xml_cell(&s, insert_row, 7, if itv.as_str()==Some("") { None } else { Some(&itv) }, "text")?;
+        s = set_xml_cell(&s, insert_row, 8, if iav.as_str()==Some("") { None } else { Some(&iav) }, "text")?;
+        s = set_xml_cell(&s, insert_row, 9, if idv.as_str()==Some("") { None } else { Some(&idv) }, "text")?;
         Ok(s)
     }) as Box<dyn Fn(&str) -> Result<String, String>>)])?;
 
     excel_get_diario()
 }
 
-// Borra una entrada del diario (borra las 4 celdas de la fila indicada).
+// Borra una entrada del diario (borra las 10 celdas de la fila indicada).
 #[tauri::command]
 fn excel_delete_diario_entrada(payload: Value) -> Result<Value, String> {
     let path = require_selected_path()?;
@@ -1940,10 +1942,7 @@ fn excel_delete_diario_entrada(payload: Value) -> Result<Value, String> {
 
     edit_workbook_sheets_xml(&path, vec![(DIARIO_SHEET, Box::new(move |xml: &str| {
         let mut s = xml.to_string();
-        s = set_xml_cell(&s, fila, 0, None, "text")?;
-        s = set_xml_cell(&s, fila, 1, None, "text")?;
-        s = set_xml_cell(&s, fila, 2, None, "text")?;
-        s = set_xml_cell(&s, fila, 3, None, "text")?;
+        for ci in 0..10 { s = set_xml_cell(&s, fila, ci, None, "text")?; }
         Ok(s)
     }) as Box<dyn Fn(&str) -> Result<String, String>>)])?;
 
