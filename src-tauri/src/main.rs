@@ -1000,8 +1000,14 @@ fn get_xml_row(sheet_xml: &str, row_number: usize) -> Option<String> {
 
 fn insert_xml_row_at(sheet_xml: &str, row_number: usize) -> Result<String, String> {
     let new_row = format!("<row r=\"{row_number}\"></row>");
-    if sheet_xml.contains("</sheetData>") {
-        Ok(sheet_xml.replace("</sheetData>", &format!("{new_row}</sheetData>")))
+    // Expandir <sheetData/> a <sheetData></sheetData> si hace falta
+    let xml = if sheet_xml.contains("<sheetData/>") {
+        sheet_xml.replace("<sheetData/>", "<sheetData></sheetData>")
+    } else {
+        sheet_xml.to_string()
+    };
+    if xml.contains("</sheetData>") {
+        Ok(xml.replace("</sheetData>", &format!("{new_row}</sheetData>")))
     } else {
         Err("La hoja no tiene una estructura sheetData valida.".to_string())
     }
