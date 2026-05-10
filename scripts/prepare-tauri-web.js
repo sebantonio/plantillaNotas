@@ -14,6 +14,7 @@ const files = [
   'visor-actividades.html',
   'visor-unidades.html',
   'informes.html',
+  'diario.html',
   'app-bridge.js'
 ];
 
